@@ -48,7 +48,9 @@ func TestLoadFromFlags(t *testing.T) {
 	cfg.LoadFromFlags()
 
 	// Parse empty args to use defaults
-	flag.CommandLine.Parse([]string{})
+	if err := flag.CommandLine.Parse([]string{}); err != nil {
+		t.Fatalf("Failed to parse flags: %v", err)
+	}
 
 	// After loading from flags with defaults, values should match NewConfig defaults
 	if cfg.URLCount != 5 {

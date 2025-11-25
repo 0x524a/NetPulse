@@ -237,7 +237,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	// Create random data (1MB chunks)
 	chunkSize := 1024 * 1024
 	data := make([]byte, chunkSize)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		return err
+	}
 
 	// Upload from multiple connections
 	numConnections := 4

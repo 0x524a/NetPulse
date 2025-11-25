@@ -425,7 +425,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	// Create random data to upload (1MB chunks)
 	chunkSize := 1024 * 1024
 	data := make([]byte, chunkSize)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		return err
+	}
 
 	// Upload to multiple URLs concurrently
 	for _, url := range uploadURLs {
