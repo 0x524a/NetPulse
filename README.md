@@ -1,9 +1,12 @@
 # NetPulse
 
-A resilient and efficient internet speed testing client built in Go with support for multiple speed test providers and automatic fallback.
+A resilient and efficient internet speed testing **library and CLI tool** built in Go with support for multiple speed test providers and automatic fallback.
+
+> **Use NetPulse as a library in your Go projects or as a standalone CLI tool for network diagnostics and speed testing.**
 
 ## Features
 
+### Core Capabilities
 - **Multi-provider support** with automatic fallback for resilience:
   - Fast.com (Netflix CDN)
   - Cloudflare (speed.cloudflare.com)
@@ -14,71 +17,133 @@ A resilient and efficient internet speed testing client built in Go with support
 - **Upload speed** measurement
 - **Latency measurement** to test servers
 - **Detailed statistics**: min/max/average speeds during the test
-- Configurable test parameters via command-line flags
+- **Provider benchmarking**: Compare performance across all providers
+
+### As a Library
+- Clean, minimal API with functional options pattern
+- Import into any Go project: `github.com/0x524a/netpulse/pkg/speedtest`
+- Customizable for your specific use case
+- Full control over test parameters and provider selection
+
+### As a CLI
+- Standalone executable with intuitive command-line interface
 - Provider selection or automatic fallback mode
 - Verbose mode for real-time progress tracking
-- Save results to file
+- Save results to file in structured format
+- Benchmarking suite to compare all providers
 - Clean, formatted output
+
+### Additional Features
 - **Custom implementations** - minimal external dependencies
+- Provider agnostic - easily extensible
+- Comprehensive test suite with high coverage
+- CI/CD ready with GitHub Actions integration
 
 ## Project Structure
 
 ```
-netpulse
-├── cmd
-│   └── main.go               # Entry point of the application
-├── internal
-│   ├── speedtest
-│   │   └── speedtest.go      # Speed test orchestrator with provider fallback
-│   ├── config
-│   │   └── config.go         # Configuration settings for the application
-│   └── providers             # Internal provider implementations
-│       ├── provider
-│       │   └── interface.go  # Common interface for all speed test providers
-│       ├── fastcom
-│       │   └── client.go     # Fast.com (Netflix CDN) provider
-│       ├── cloudflare
-│       │   └── client.go     # Cloudflare provider
-│       ├── mlab
-│       │   └── client.go     # M-Lab provider
-│       ├── librespeed
-│       │   └── client.go     # LibreSpeed provider
-│       └── ookla
-│           └── client.go     # Ookla/Speedtest.net provider
-├── pkg
-│   ├── speedtest
-│   │   └── client.go         # Public API for the speed test library
-│   └── reporter
-│       └── reporter.go       # Reporting results of the speed test
-├── go.mod                     # Module dependencies
-├── go.sum                     # Module dependency checksums
-└── README.md                  # Project documentation
+netpulse/
+├── cmd/                      # CLI Application
+│   └── main.go              # CLI entry point (executable only)
+│
+├── pkg/                      # Public Library API
+│   ├── speedtest/           # Main speedtest library
+│   │   └── client.go        # Public speedtest client with functional options
+│   ├── reporter/            # Result formatting and reporting
+│   │   └── reporter.go      # Console and file output
+│   ├── benchmarks/          # Benchmarking suite
+│   │   └── suite.go         # Provider comparison and scoring
+│   ├── metrics/             # Metrics and classification
+│   │   └── classification.go # Speed classification utilities
+│   └── ookla/               # Ookla integration
+│
+├── internal/                 # Internal Implementation (not part of public API)
+│   ├── speedtest/           # Speed test orchestrator
+│   │   └── speedtest.go     # Test execution and provider fallback
+│   ├── config/              # Configuration management
+│   │   └── config.go        # Internal config structure
+│   └── providers/           # Provider implementations
+│       ├── provider/        # Provider interface
+│       │   └── interface.go
+│       ├── fastcom/         # Fast.com implementation
+│       ├── cloudflare/      # Cloudflare implementation
+│       ├── mlab/            # M-Lab implementation
+│       ├── librespeed/      # LibreSpeed implementation
+│       └── ookla/           # Ookla/Speedtest.net implementation
+│
+├── go.mod                    # Module definition
+├── go.sum                    # Dependency checksums
+└── README.md                 # Documentation
 ```
+
+### Architecture Overview
+
+NetPulse is designed with clear separation between the **public library API** and **internal implementations**:
+
+- **`pkg/` (Public API)**: Stable, versioned library code intended for external use
+  - Clean interfaces with functional options pattern
+  - Minimal dependencies
+  - Backward compatibility guarantees
+
+- **`internal/` (Implementation)**: Provider-specific and orchestration logic
+  - Network I/O and API integration details
+  - May change between versions
+  - Not intended for external use
+
+- **`cmd/` (CLI)**: Command-line application
+  - Uses the public library API
+  - Demonstrates library usage
+  - Independent of internal changes
 
 ## Installation
 
-To install the project, clone the repository and navigate to the project directory:
+### As a Library
+
+Add NetPulse to your Go project:
+
+```bash
+go get github.com/0x524a/netpulse@latest
+```
+
+Then import and use in your code:
+
+```go
+import "github.com/0x524a/netpulse/pkg/speedtest"
+
+client := speedtest.New(
+    speedtest.WithProvider("auto"),
+    speedtest.WithVerbose(true),
+)
+
+result, err := client.Run()
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Download: %.2f Mbps\n", result.DownloadMbps)
+fmt.Printf("Upload: %.2f Mbps\n", result.UploadMbps)
+```
+
+### As a CLI Tool
+
+Clone the repository and build the executable:
 
 ```bash
 git clone https://github.com/0x524a/netpulse.git
 cd netpulse
-```
-
-Then, run the following command to download the necessary dependencies:
-
-```bash
 go mod tidy
+go build -o netpulse ./cmd
 ```
 
-Build the executable:
+Or use `go install` to install directly:
 
 ```bash
-go build -o netpulse ./cmd
+go install github.com/0x524a/netpulse/cmd@latest
 ```
 
 ## Usage
 
-### Basic Usage
+### CLI Usage
 
 Run a simple speed test:
 
@@ -92,47 +157,19 @@ Or run directly with Go:
 go run cmd/main.go
 ```
 
-### Command-Line Options
+#### Command-Line Options
 
-- `-urls` - Number of URLs to test with (default: 5)
+- `-provider` - Speed test provider: `auto`, `fastcom`, `cloudflare`, `mlab`, `librespeed`, or `ookla` (default: auto)
+- `-server` - Server selection mode: `auto`, `random`, or `specific` (default: auto)
 - `-duration` - Duration of the speed test (default: 15s)
+- `-urls` - Number of URLs to test with (default: 5)
 - `-verbose` - Enable verbose output (default: false)
 - `-save` - Save results to file (default: false)
 - `-output` - Output file name (default: speedtest_results.txt)
-- `-provider` - Speed test provider: `auto`, `fastcom`, `cloudflare`, `mlab`, `librespeed`, or `ookla` (default: auto)
-- `-server` - Server selection mode: `auto` (best), `random`, or `specific` (default: auto)
 
-### Provider Selection
+#### CLI Examples
 
-The client supports five reliable speed test providers:
-
-1. **Fast.com** (Netflix CDN) - Default first choice
-   - Uses Netflix's global CDN infrastructure
-   - Custom implementation with token-based authentication
-   
-2. **Cloudflare** (speed.cloudflare.com)
-   - Cloudflare's global edge network
-   - Fast and reliable worldwide coverage
-   
-3. **M-Lab** (Measurement Lab)
-   - Open-source internet measurement platform
-   - Operated by research institutions
-   
-4. **LibreSpeed** - Open-source speed test
-   - Community-driven infrastructure
-   - Privacy-focused with no tracking
-   
-5. **Ookla/Speedtest.net** - Industry standard
-   - Widely used commercial speed test
-   - Extensive server network
-
-**Auto mode** (default) tries each provider in order until one succeeds, providing resilience against service outages.
-
-**Specific provider mode** uses only the selected provider for consistent results.
-
-### Examples
-
-Run a speed test with verbose output (auto fallback mode):
+Run a speed test with verbose output:
 ```bash
 ./netpulse -verbose
 ```
@@ -140,10 +177,10 @@ Run a speed test with verbose output (auto fallback mode):
 Use a specific provider:
 ```bash
 ./netpulse -provider fastcom -verbose
-./netpulse -provider cloudflare -verbose
-./netpulse -provider mlab -verbose
-./netpulse -provider librespeed -verbose
-./netpulse -provider ookla -verbose
+./netpulse -provider cloudflare
+./netpulse -provider mlab
+./netpulse -provider librespeed
+./netpulse -provider ookla
 ```
 
 Use random server selection:
@@ -161,84 +198,167 @@ Save results to a file:
 ./netpulse -save -output results.txt
 ```
 
-Run a comprehensive test with specific provider:
+Run a comprehensive test:
 ```bash
 ./netpulse -provider fastcom -urls 10 -duration 30s -verbose -save
 ```
 
-## Output Example
-
-```
-Internet Speed Test Client
-===========================
-
-Starting speed test...
-Using provider: auto
----
-Trying provider: Fast.com...
-Using provider: Fast.com
----
-Latency: 9.82 ms
----
-Download speed: 682.65 Mbps
----
-Testing upload speed...
-Upload speed: 67.11 Mbps
-
-Speed Test Results
-==================
-Provider:       Fast.com
-
-Download Speed: 682.65 Mbps (682652.47 Kbps)
-  - Average:    651.65 Mbps
-  - Maximum:    682.65 Mbps
-  - Minimum:    538.67 Mbps
-
-Upload Speed:   67.11 Mbps (67106.57 Kbps)
-  - Average:    60.67 Mbps
-  - Maximum:    67.11 Mbps
-  - Minimum:    41.93 Mbps
-
-Latency:        9.82 ms
-Download Time:  11.08s
-Upload Time:    5.392s
-Timestamp:      2025-11-24T23:13:36-05:00
+Benchmark and compare all providers:
+```bash
+./netpulse benchmark -t 3 -d 15s --verbose
 ```
 
-## Configuration
+### Library Usage
 
-The application uses command-line flags for configuration. You can customize:
-- Number of test URLs
-- Test duration
-- Output verbosity
-- Provider selection (auto fallback or specific provider)
-- File saving options
+#### Basic Example
 
-## Architecture
+```go
+package main
 
-The client uses a clean layered architecture:
+import (
+	"fmt"
+	"log"
+	"github.com/0x524a/netpulse/pkg/speedtest"
+)
 
-### Public API Layer (`pkg/speedtest`)
-- **Clean Interface**: Exposes simple functional options pattern for configuration
-- **Abstraction**: Hides provider implementation details from users
-- **Easy Integration**: Can be imported as a library in other Go projects
+func main() {
+	// Create a client with auto provider selection
+	client := speedtest.New(
+		speedtest.WithProvider("auto"),
+		speedtest.WithVerbose(true),
+		speedtest.WithDuration(15*time.Second),
+	)
 
-### Internal Layer (`internal/`)
-- **Provider Interface**: Common contract for all speed test providers
-- **Provider Implementations**: Each provider (Fast.com, Cloudflare, M-Lab, LibreSpeed, Ookla)
-- **Orchestrator**: Manages provider fallback and test execution
-- **Configuration**: Command-line flag management
+	// Run the speed test
+	result, err := client.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-### Key Features
-- **Resilience**: If one provider is down, the client automatically falls back to alternatives
-- **Flexibility**: Users can choose specific providers, use automatic selection, or random selection
-- **Consistency**: All providers return standardized results
-- **Extensibility**: New providers can be easily added by implementing the interface
-- **Clean Separation**: Provider implementations are internal, public API is stable
+	// Use the results
+	fmt.Printf("Provider: %s\n", result.ProviderName)
+	fmt.Printf("Download Speed: %.2f Mbps\n", result.DownloadMbps)
+	fmt.Printf("Upload Speed: %.2f Mbps\n", result.UploadMbps)
+	fmt.Printf("Latency: %v\n", result.Latency)
+}
+```
 
-## Reporting
+#### Using Functional Options
 
-The results of the speed test can be reported to the console or saved to a file using the methods provided in the `reporter.go` file located in the `pkg/reporter` directory.
+```go
+import "github.com/0x524a/netpulse/pkg/speedtest"
+
+// Configure with functional options
+client := speedtest.New(
+	speedtest.WithProvider("fastcom"),        // Use Fast.com
+	speedtest.WithDuration(20*time.Second),   // 20s test duration
+	speedtest.WithURLCount(10),               // Use 10 URLs
+	speedtest.WithServerMode("random"),       // Random server selection
+	speedtest.WithVerbose(true),              // Enable progress output
+	speedtest.WithOutputFile("results.txt"),  // Save results
+)
+
+result, err := client.Run()
+```
+
+#### Accessing Detailed Results
+
+```go
+// All results are available on the Result struct
+fmt.Printf("Average Download: %.2f Mbps\n", result.AvgDownloadMbps)
+fmt.Printf("Max Download: %.2f Mbps\n", result.MaxDownloadMbps)
+fmt.Printf("Min Download: %.2f Mbps\n", result.MinDownloadMbps)
+fmt.Printf("Std Dev Download: %.2f Mbps\n", result.StdDevDownloadMbps)
+
+fmt.Printf("Average Upload: %.2f Mbps\n", result.AvgUploadMbps)
+fmt.Printf("Jitter: %v\n", result.Jitter)
+fmt.Printf("Timestamp: %v\n", result.Timestamp)
+```
+
+#### Running Benchmarks Programmatically
+
+```go
+// Benchmark all providers
+client := speedtest.New(
+	speedtest.WithProvider("all"),
+	speedtest.WithDuration(10*time.Second),
+)
+
+results, err := client.RunBenchmark(3)  // Run 3 tests per provider
+if err != nil {
+	log.Fatal(err)
+}
+
+// Access benchmark results
+for _, result := range results {
+	fmt.Printf("%s - Score: %.2f\n", result.ProviderName, result.Score)
+}
+```
+
+## Design Principles
+
+NetPulse follows Go best practices and these core design principles:
+
+### Public Library API (`pkg/`)
+- **Functional Options Pattern**: Clean, extensible configuration API
+- **Minimal Dependencies**: Only necessary external imports
+- **Stable Interface**: Backward compatible across versions
+- **Well-Documented**: Exported functions have clear documentation
+- **Importable**: Easy to use as a library: `go get github.com/0x524a/netpulse@latest`
+
+### Internal Implementation (`internal/`)
+- **Provider Abstraction**: Common interface for all speed test providers
+- **Extensible**: Add new providers by implementing the interface
+- **Resilient**: Automatic fallback between providers
+- **Testable**: Unit tested with mocked providers and integration tests
+
+### CLI Application (`cmd/`)
+- **Demonstrates Library Usage**: Shows how to use NetPulse as a library
+- **Production-Ready**: Full feature set with benchmarking and result saving
+- **User-Friendly**: Intuitive command-line interface with helpful options
+- **Flexible**: Support for multiple providers, custom test parameters
+
+### Key Architectural Features
+- **Resilience**: If one provider is down, automatically falls back to alternatives
+- **Flexibility**: Choose specific providers, use automatic selection, or run benchmarks
+- **Consistency**: All providers return standardized results with identical metrics
+- **Extensibility**: New providers can be added without modifying existing code
+- **Clean Separation**: Clear boundary between public API and implementation details
+
+## Supported Speed Test Providers
+
+1. **Fast.com** (Netflix CDN)
+   - Uses Netflix's global CDN infrastructure
+   - Custom implementation with token-based authentication
+   
+2. **Cloudflare** (speed.cloudflare.com)
+   - Cloudflare's global edge network
+   - Fast and reliable worldwide coverage
+   
+3. **M-Lab** (Measurement Lab)
+   - Open-source internet measurement platform
+   - Operated by research institutions
+   
+4. **LibreSpeed**
+   - Community-driven open-source speed test
+   - Privacy-focused with no tracking
+   
+5. **Ookla/Speedtest.net**
+   - Industry standard speed test
+   - Extensive global server network
+
+**Auto mode** (default) tries each provider in order until one succeeds, providing resilience against service outages.
+
+## Result Output
+
+Results include detailed metrics:
+- **Download Speed**: Mbps with min/max/average
+- **Upload Speed**: Mbps with min/max/average
+- **Latency**: Round-trip time to test server
+- **Jitter**: Latency variation (stability metric)
+- **Standard Deviation**: Consistency of speeds
+- **Timestamp**: When the test was run
+- **Test Duration**: How long download/upload took
 
 ## Testing
 
