@@ -1,16 +1,18 @@
 package main
 
-	import (
-		"fmt"
-		"log"
-		"os"
-		"time"
+import (
+	"fmt"
+	"log"
+	"os"
+	"time"
 
-		"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 
-		"github.com/0x524a/netpulse/pkg/reporter"
-		"github.com/0x524a/netpulse/pkg/speedtest"
-	)func main() {
+	"github.com/0x524a/netpulse/pkg/reporter"
+	"github.com/0x524a/netpulse/pkg/speedtest"
+)
+
+func main() {
 	app := &cli.App{
 		Name:    "speedtest",
 		Usage:   "Internet Speed Test Client",
