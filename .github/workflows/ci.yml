@@ -28,14 +28,17 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      run: go mod download
 
     - name: Build
       run: |
         go build -v ./internal/... ./pkg/...
-        cd cmd && go build -v ./...
+        cd cmd && go mod download && go build -v ./...
 
     - name: Test
       run: go test -v -race -coverprofile=coverage.out ./pkg/... ./internal/...
@@ -63,14 +66,17 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-1.24-
+
+    - name: Download dependencies
+      run: go mod download
 
     - name: Build packages
       run: |
         go build ./internal/... ./pkg/...
-        cd cmd && go build ./...
+        cd cmd && go mod download && go build ./...
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
