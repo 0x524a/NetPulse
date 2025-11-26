@@ -34,11 +34,16 @@ jobs:
 
     - name: Download dependencies
       run: go mod download
+      working-directory: .
 
     - name: Build
+      run: go build -v ./internal/... ./pkg/...
+
+    - name: Build CLI
       run: |
-        go build -v ./internal/... ./pkg/...
-        cd cmd && go mod download && go build -v ./...
+        cd cmd
+        go mod download
+        go build -v ./...
 
     - name: Test
       run: go test -v -race -coverprofile=coverage.out ./pkg/... ./internal/...
@@ -72,11 +77,16 @@ jobs:
 
     - name: Download dependencies
       run: go mod download
+      working-directory: .
 
     - name: Build packages
+      run: go build ./internal/... ./pkg/...
+
+    - name: Build CLI
       run: |
-        go build ./internal/... ./pkg/...
-        cd cmd && go mod download && go build ./...
+        cd cmd
+        go mod download
+        go build ./...
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
