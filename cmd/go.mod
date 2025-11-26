@@ -3,8 +3,8 @@ module github.com/0x524a/netpulse/cmd
 go 1.24.0
 
 require (
-	github.com/0x524a/netpulse v0.0.0
 	github.com/urfave/cli/v2 v2.27.7
+	github.com/0x524a/netpulse v0.0.0-00010101000000-000000000000
 )
 
 require (
