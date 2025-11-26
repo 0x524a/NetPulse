@@ -107,7 +107,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 		report.WriteString(fmt.Sprintf("    Min:                %.2f ms\n", benchmark.MinLatencyMs))
 		report.WriteString(fmt.Sprintf("    Max:                %.2f ms\n", benchmark.MaxLatencyMs))
 		report.WriteString("\n")
-		report.WriteString(fmt.Sprintf("  Jitter:\n"))
+		report.WriteString("  Jitter:\n")
 		report.WriteString(fmt.Sprintf("    Average:            %.2f ms\n", benchmark.AvgJitterMs))
 		report.WriteString("\n")
 		report.WriteString(fmt.Sprintf("  Overall Score:       %.2f/100\n", suite.ProviderScores[provider]))

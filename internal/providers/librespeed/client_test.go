@@ -51,12 +51,12 @@ func TestInitMultipleTimes(t *testing.T) {
 func TestMeasureLatency(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}))
 	defer server.Close()
 
 	client := New()
-	client.Init()
+	_ = client.Init()
 	latency, err := client.MeasureLatency()
 	if err != nil {
 		t.Logf("MeasureLatency() error: %v", err)
@@ -69,7 +69,7 @@ func TestMeasureLatency(t *testing.T) {
 
 func TestMeasureLatencyMultipleTimes(t *testing.T) {
 	client := New()
-	client.Init()
+	_ = client.Init()
 
 	latency1, err1 := client.MeasureLatency()
 	latency2, err2 := client.MeasureLatency()
@@ -86,12 +86,12 @@ func TestMeasureDownloadWithMock(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", string(rune(len(testData))))
 		w.WriteHeader(http.StatusOK)
-		w.Write(testData)
+		_, _ = w.Write(testData)
 	}))
 	defer server.Close()
 
 	client := New()
-	client.Init()
+	_ = client.Init()
 	speedChan := make(chan float64, 100)
 
 	go func() {
@@ -119,7 +119,7 @@ func TestMeasureUploadWithMock(t *testing.T) {
 	defer server.Close()
 
 	client := New()
-	client.Init()
+	_ = client.Init()
 	speedChan := make(chan float64, 100)
 
 	go func() {
@@ -141,7 +141,7 @@ func TestMeasureUploadWithShortDuration(t *testing.T) {
 	defer server.Close()
 
 	client := New()
-	client.Init()
+	_ = client.Init()
 	speedChan := make(chan float64, 100)
 
 	go func() {

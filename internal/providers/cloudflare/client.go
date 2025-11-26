@@ -50,7 +50,7 @@ func (c *Client) IsAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -75,7 +75,7 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 		if err != nil {
 			return 0, err
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		latency := time.Since(start)
 		totalLatency += latency
@@ -105,7 +105,7 @@ func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		measurements = append(measurements, time.Since(start))
 	}
 
@@ -215,7 +215,7 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 					for {
 						select {
 						case <-done:
-							resp.Body.Close()
+							_ = resp.Body.Close()
 							return
 						default:
 							n, err := resp.Body.Read(buffer)
@@ -225,7 +225,7 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 								byteMux.Unlock()
 							}
 							if err != nil {
-								resp.Body.Close()
+								_ = resp.Body.Close()
 								if err != io.EOF {
 									errors <- err
 								}
@@ -325,8 +325,8 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 						return
 					}
 
-					io.Copy(io.Discard, resp.Body)
-					resp.Body.Close()
+					_, _ = io.Copy(io.Discard, resp.Body)
+					_ = resp.Body.Close()
 
 					byteMux.Lock()
 					totalBytes += int64(len(data))
