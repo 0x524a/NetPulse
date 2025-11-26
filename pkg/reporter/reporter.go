@@ -24,7 +24,7 @@ func (r *Reporter) SaveToFile(filename string, results string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	_, err = file.WriteString(results)
 	if err != nil {

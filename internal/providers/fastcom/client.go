@@ -281,7 +281,7 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 
 	var secondPass float64
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		for {
 			select {
 			case <-done:
@@ -425,7 +425,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	// Create random data to upload (1MB chunks)
 	chunkSize := 1024 * 1024
 	data := make([]byte, chunkSize)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		return err
+	}
 
 	// Upload to multiple URLs concurrently
 	for _, url := range uploadURLs {
@@ -473,7 +475,7 @@ func (c *Client) uploadChunk(url string, data []byte) int64 {
 	defer resp.Body.Close()
 
 	// Discard response body
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 
 	return int64(len(data))
 }
@@ -486,7 +488,7 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 		return 0, err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	return time.Since(start), nil
 }
 
@@ -503,7 +505,7 @@ func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 		if err != nil {
 			continue
 		}
-		io.Copy(io.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 		measurements = append(measurements, time.Since(start))
 	}

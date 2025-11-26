@@ -49,7 +49,7 @@ func (c *Client) IsAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -146,7 +146,7 @@ func (c *Client) downloadChunk() int64 {
 	if err != nil {
 		return 0
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	buf := make([]byte, bufferSize)
 	var total int64
@@ -210,7 +210,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	// Create random data (1MB chunks)
 	chunkSize := 1024 * 1024
 	data := make([]byte, chunkSize)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		return err
+	}
 
 	// Upload from multiple connections
 	numConnections := 4
@@ -258,9 +260,9 @@ func (c *Client) uploadChunk(data []byte) int64 {
 	if err != nil {
 		return 0
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 
 	return int64(len(data))
 }
@@ -272,8 +274,8 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
 
 	return time.Since(start), nil
 }
