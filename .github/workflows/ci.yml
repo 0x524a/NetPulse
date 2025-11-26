@@ -106,6 +106,8 @@ jobs:
       with:
         version: latest
         args: --timeout=5m ./internal/... ./pkg/...
+        skip-pkg-cache: true
+        skip-build-cache: true
 
   security:
     runs-on: ubuntu-latest
