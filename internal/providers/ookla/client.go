@@ -88,7 +88,7 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	go func() {
 		defer func() {
 			// Ensure we don't panic if channel is closed
-			recover()
+			_ = recover()
 		}()
 		for {
 			select {
@@ -200,7 +200,7 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	go func() {
 		defer func() {
 			// Ensure we don't panic if channel is closed
-			recover()
+			_ = recover()
 		}()
 		for {
 			select {

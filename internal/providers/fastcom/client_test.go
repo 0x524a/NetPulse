@@ -74,7 +74,7 @@ func TestInitMultipleTimes(t *testing.T) {
 func TestMeasureLatencyWithMockServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
+		_, _ = w.Write([]byte("pong"))
 	}))
 	defer server.Close()
 
@@ -96,7 +96,7 @@ func TestMeasureDownloadWithMockData(t *testing.T) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Content-Length", string(rune(len(testData))))
 		w.WriteHeader(http.StatusOK)
-		w.Write(testData)
+		_, _ = w.Write(testData)
 	}))
 	defer server.Close()
 
@@ -123,7 +123,7 @@ func TestMeasureUploadWithMockServer(t *testing.T) {
 			t.Logf("Mock server received %d bytes", len(body))
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}))
 	defer server.Close()
 
