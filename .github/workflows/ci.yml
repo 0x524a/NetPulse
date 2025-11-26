@@ -33,11 +33,17 @@ jobs:
           ${{ runner.os }}-go-${{ matrix.go-version }}-
 
     - name: Download dependencies
-      run: go mod download
+      run: |
+        go mod download
       working-directory: .
+      env:
+        GOFLAGS: "-modcacherw"
 
     - name: Build
-      run: go build -v ./internal/... ./pkg/...
+      run: |
+        go build -v ./internal/... ./pkg/...
+      env:
+        GOFLAGS: "-modcacherw"
 
     - name: Build CLI
       run: |
