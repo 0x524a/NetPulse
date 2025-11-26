@@ -1,4 +1,3 @@
-package speedtestclient
 // +build integration
 
 package main
@@ -20,64 +19,62 @@ func TestIntegrationFastcom(t *testing.T) {
 
 	client := speedtest.New(
 		speedtest.WithProvider("fastcom"),
+		speedtest.WithVerbose(true),
+		speedtest.WithURLCount(2),
+		speedtest.WithDuration(5*time.Second),
+	)
 
+	result, err := client.Run()
+	if err != nil {
+		t.Logf("Fast.com test failed (may be unavailable): %v", err)
+		return
+	}
 
+	if result.DownloadMbps <= 0 {
+		t.Error("Expected positive download speed")
+	}
+	t.Logf("Used provider: %s", result.ProviderName)
+}
 
+func TestIntegrationAutoFallback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 
+	client := speedtest.New(
+		speedtest.WithProvider("auto"),
+		speedtest.WithURLCount(2),
+		speedtest.WithDuration(5*time.Second),
+	)
 
+	result, err := client.Run()
+	if err != nil {
+		t.Fatalf("Auto fallback failed: %v", err)
+	}
 
+	if result.DownloadMbps <= 0 {
+		t.Error("Expected positive download speed")
+	}
+}
 
+func TestIntegrationRandomServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 
+	client := speedtest.New(
+		speedtest.WithServerMode("random"),
+		speedtest.WithURLCount(2),
+		speedtest.WithDuration(5*time.Second),
+	)
 
+	result, err := client.Run()
+	if err != nil {
+		t.Logf("Random server test failed: %v", err)
+		return
+	}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	}		t.Error("Expected positive download speed")	if result.DownloadMbps <= 0 {	}		return		t.Logf("Random server test failed: %v", err)	if err != nil {	result, err := client.Run()	)		speedtest.WithURLCount(2),		speedtest.WithDuration(5*time.Second),		speedtest.WithServerMode("random"),	client := speedtest.New(	}		t.Skip("Skipping integration test in short mode")	if testing.Short() {func TestIntegrationRandomServer(t *testing.T) {}	t.Logf("Used provider: %s", result.ProviderName)	}		t.Error("Expected positive download speed")	if result.DownloadMbps <= 0 {	}		t.Fatalf("Auto fallback failed: %v", err)	if err != nil {	result, err := client.Run()	)		speedtest.WithURLCount(2),		speedtest.WithDuration(5*time.Second),		speedtest.WithProvider("auto"),	client := speedtest.New(	}		t.Skip("Skipping integration test in short mode")	if testing.Short() {func TestIntegrationAutoFallback(t *testing.T) {}	}		t.Error("Expected positive download speed")	if result.DownloadMbps <= 0 {	}		return		t.Logf("Fast.com test failed (may be unavailable): %v", err)	if err != nil {	result, err := client.Run()	)		speedtest.WithVerbose(true),		speedtest.WithURLCount(2),		speedtest.WithDuration(5*time.Second),
+	if result.DownloadMbps <= 0 {
+		t.Error("Expected positive download speed")
+	}
+}

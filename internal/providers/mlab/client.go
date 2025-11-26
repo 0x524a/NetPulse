@@ -328,7 +328,10 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 			defer wg.Done()
 
 			data := make([]byte, bufferSize)
-			rand.Read(data)
+			if _, err := rand.Read(data); err != nil {
+				errors <- err
+				return
+			}
 
 			for {
 				select {
