@@ -25,11 +25,11 @@ func TestPrintToConsole(t *testing.T) {
 	reporter := New()
 	reporter.PrintToConsole(results)
 
-	pipeWriter.Close()
+	_ = pipeWriter.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	io.Copy(&buf, pipeReader)
+	_, _ = io.Copy(&buf, pipeReader)
 
 	if !strings.Contains(buf.String(), "Test output") {
 		t.Error("PrintToConsole should output results")
@@ -57,7 +57,7 @@ Latency:        10.00 ms`
 func TestSaveToFile(t *testing.T) {
 	r := New()
 	testFile := "test_results.txt"
-	defer os.Remove(testFile)
+	defer func() { _ = os.Remove(testFile) }()
 
 	results := "Test results"
 	err := r.SaveToFile(testFile, results)

@@ -13,6 +13,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         go-version: ['1.21', '1.22', '1.24']
+    
+    env:
+      GOWORK: off
 
     steps:
     - uses: actions/checkout@v4
@@ -28,14 +31,28 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      run: |
+        go mod download
+      working-directory: .
+      env:
+        GOFLAGS: "-modcacherw"
 
     - name: Build
       run: |
         go build -v ./internal/... ./pkg/...
-        cd cmd && go build -v ./...
+      env:
+        GOFLAGS: "-modcacherw"
+
+    - name: Build CLI
+      run: |
+        cd cmd
+        go mod download
+        go build -v ./...
 
     - name: Test
       run: go test -v -race -coverprofile=coverage.out ./pkg/... ./internal/...
@@ -49,6 +66,10 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    
+    env:
+      GOWORK: off
+    
     steps:
     - uses: actions/checkout@v4
 
@@ -63,23 +84,37 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-1.24-
 
+    - name: Download dependencies
+      run: go mod download
+      working-directory: .
+
     - name: Build packages
+      run: go build ./internal/... ./pkg/...
+
+    - name: Build CLI
       run: |
-        go build ./internal/... ./pkg/...
-        cd cmd && go build ./...
+        cd cmd
+        go mod download
+        go build ./...
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
         version: latest
         args: --timeout=5m ./internal/... ./pkg/...
+        skip-pkg-cache: true
+        skip-build-cache: true
 
   security:
     runs-on: ubuntu-latest
+    
+    env:
+      GOWORK: off
+    
     steps:
     - uses: actions/checkout@v4
 

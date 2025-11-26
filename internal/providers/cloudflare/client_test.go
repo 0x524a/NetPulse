@@ -42,7 +42,7 @@ func TestInit(t *testing.T) {
 func TestMeasureLatency(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}))
 	defer server.Close()
 
@@ -63,7 +63,7 @@ func TestMeasureDownloadWithMock(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", string(rune(len(testData))))
 		w.WriteHeader(http.StatusOK)
-		w.Write(testData)
+		_, _ = w.Write(testData)
 	}))
 	defer server.Close()
 
@@ -107,7 +107,7 @@ func TestMeasureUploadWithMock(t *testing.T) {
 
 func TestGetResult(t *testing.T) {
 	client := New()
-	client.Init()
+	_ = client.Init()
 	result := client.GetResult()
 	t.Logf("GetResult() returned: %v (may be unimplemented)", result)
 }
