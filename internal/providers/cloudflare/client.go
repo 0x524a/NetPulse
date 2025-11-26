@@ -156,7 +156,7 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	defer ticker.Stop()
 
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		for {
 			select {
 			case <-done:
@@ -269,7 +269,7 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	defer ticker.Stop()
 
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		for {
 			select {
 			case <-done:
