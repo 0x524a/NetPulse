@@ -61,7 +61,7 @@ func (c *Client) IsAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -72,7 +72,7 @@ func (c *Client) Init() error {
 	if err != nil {
 		return ErrInternet
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -91,7 +91,7 @@ func (c *Client) Init() error {
 	if err != nil {
 		return ErrInternet
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	jsData, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -189,7 +189,7 @@ func (c *Client) GetURLs(count int) ([]string, error) {
 	if err != nil {
 		return nil, ErrInternet
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -343,7 +343,7 @@ func (c *Client) download(url string, byteLenChan chan<- int64, done <-chan stru
 	if err != nil {
 		return ErrInternet
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	buf := make([]byte, bufferSize)
 
@@ -472,7 +472,7 @@ func (c *Client) uploadChunk(url string, data []byte) int64 {
 	if err != nil {
 		return 0
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Discard response body
 	_, _ = io.Copy(io.Discard, resp.Body)
@@ -487,7 +487,7 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return time.Since(start), nil
 }
@@ -506,7 +506,7 @@ func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 			continue
 		}
 		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		measurements = append(measurements, time.Since(start))
 	}
 
