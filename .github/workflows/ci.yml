@@ -82,6 +82,9 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    - name: Verify dependencies
+      run: go mod verify
+
     - name: Build packages
       run: go build -v ./...
 
@@ -90,8 +93,6 @@ jobs:
       with:
         version: latest
         args: --timeout=5m
-        skip-pkg-cache: true
-        skip-build-cache: true
 
   security:
     runs-on: ubuntu-latest
