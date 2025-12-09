@@ -69,10 +69,6 @@ func TestWithOutputFile(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
-	}
-	
 	// This test will attempt to run but likely fail due to network
 	// Still covers the Run() code path
 	client := New(
