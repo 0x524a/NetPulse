@@ -1,6 +1,6 @@
 # Binaries
 netpulse
-speedtest
+/speedtest
 cmd/cmd
 *.exe
 *.dll
