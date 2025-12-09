@@ -32,9 +32,6 @@ jobs:
             goarch: arm64
             artifact: netpulse
 
-    env:
-      GOWORK: off
-
     steps:
     - uses: actions/checkout@v4
 
@@ -45,6 +42,9 @@ jobs:
 
     - name: Download dependencies
       run: go mod download
+
+    - name: Verify dependencies  
+      run: go mod verify
 
     - name: Build
       run: |
