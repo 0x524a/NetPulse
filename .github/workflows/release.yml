@@ -32,9 +32,6 @@ jobs:
             goarch: arm64
             artifact: netpulse
 
-    env:
-      GOWORK: off
-
     steps:
     - uses: actions/checkout@v4
 
