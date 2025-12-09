@@ -36,23 +36,14 @@ jobs:
           ${{ runner.os }}-go-${{ matrix.go-version }}-
 
     - name: Download dependencies
-      run: |
-        go mod download
-      working-directory: .
+      run: go mod download
       env:
         GOFLAGS: "-modcacherw"
 
     - name: Build
-      run: |
-        go build -v ./internal/... ./pkg/...
+      run: go build -v ./...
       env:
         GOFLAGS: "-modcacherw"
-
-    - name: Build CLI
-      run: |
-        cd cmd
-        go mod download
-        go build -v ./...
 
     - name: Test
       run: go test -v -race -coverprofile=coverage.out ./pkg/... ./internal/...
@@ -66,9 +57,6 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    
-    env:
-      GOWORK: off
     
     steps:
     - uses: actions/checkout@v4
@@ -84,30 +72,24 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.24-${{ hashFiles('go.sum') }}
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-1.24-
 
     - name: Download dependencies
       run: go mod download
-      working-directory: .
+
+    - name: Verify dependencies
+      run: go mod verify
 
     - name: Build packages
-      run: go build ./internal/... ./pkg/...
+      run: go build -v ./...
 
-    - name: Build CLI
-      run: |
-        cd cmd
-        go mod download
-        go build ./...
+    - name: Install golangci-lint
+      run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
 
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v3
-      with:
-        version: latest
-        args: --timeout=5m ./internal/... ./pkg/...
-        skip-pkg-cache: true
-        skip-build-cache: true
+    - name: Run golangci-lint
+      run: golangci-lint run --timeout=5m
 
   security:
     runs-on: ubuntu-latest
@@ -126,7 +108,7 @@ jobs:
     - name: Run Gosec Security Scanner
       uses: securego/gosec@master
       with:
-        args: '-no-fail -fmt sarif -out gosec-results.sarif ./internal/... ./pkg/...'
+        args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
 
     - name: Upload Gosec results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
