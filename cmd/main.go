@@ -220,18 +220,24 @@ Quality Metrics:
 func cmdBenchmark(c *cli.Context) error {
 	numTests := c.Int("tests")
 	duration := c.Duration("duration")
-	verbose := c.Bool("verbose")
 	outputFile := c.String("output")
 
+	providers := []string{"fastcom", "cloudflare", "mlab", "librespeed", "ookla"}
+	totalProviders := len(providers)
+	
 	fmt.Println("Internet Speed Test Client - Provider Benchmark")
 	fmt.Println("==============================================")
 	fmt.Println()
-	fmt.Printf("Running %d test(s) per provider with %s duration each...\n", numTests, duration)
+	fmt.Printf("Testing %d providers with %d test(s) each\n", totalProviders, numTests)
+	fmt.Printf("Duration per test: %s\n", duration)
+	fmt.Printf("Estimated total time: ~%s\n", time.Duration(int64(duration)*int64(totalProviders)*int64(numTests)*12/10))
+	fmt.Println()
+	fmt.Println("💡 Tip: Press Ctrl+C to cancel at any time")
 	fmt.Println()
 
 	// For now, run a comprehensive test with all providers
 	client := speedtest.New(
-		speedtest.WithVerbose(verbose),
+		speedtest.WithVerbose(true), // Force verbose to show progress
 		speedtest.WithProvider("all"),
 		speedtest.WithDuration(duration),
 	)

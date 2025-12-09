@@ -242,7 +242,6 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	var once sync.Once
 	stop := func() {
 		close(done)
-		close(speedChan)
 	}
 
 	// Timeout handling
@@ -452,7 +451,6 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	}
 
 	wg.Wait()
-	close(speedChan)
 
 	return nil
 }
