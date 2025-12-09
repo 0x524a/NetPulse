@@ -138,7 +138,6 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	var once sync.Once
 	stop := func() {
 		close(done)
-		close(speedChan)
 	}
 
 	var totalBytes int64
