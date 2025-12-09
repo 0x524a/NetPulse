@@ -46,6 +46,9 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    - name: Verify dependencies  
+      run: go mod verify
+
     - name: Build
       run: |
         GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o ${{ matrix.artifact }} ./cmd
