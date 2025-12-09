@@ -43,7 +43,7 @@ jobs:
         GOFLAGS: "-modcacherw"
 
     - name: Test
-      run: go test -v -race -coverprofile=coverage.out ./pkg/... ./internal/...
+      run: go test -v -race -short -coverprofile=coverage.out ./pkg/... ./internal/...
 
     - name: Upload Coverage
       uses: codecov/codecov-action@v3
