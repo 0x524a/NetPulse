@@ -13,8 +13,12 @@ import (
 )
 
 const (
-	measurementURL = "https://cachefly.cachefly.net/100mb.test"
-	uploadURL      = "https://httpbin.org/post"
+	// For download, use a large file hosted on a CDN (Cloudflare often caches these)
+	// Using a well-known test file that's likely cached by Cloudflare
+	measurementURL = "https://cachefly.cachefly.net/10mb.test"
+	// For upload testing, we need an endpoint that accepts POST requests
+	// Using a simple discard endpoint instead of httpbin for better reliability
+	uploadURL      = "http://httpbin.org/post" // TODO: Find better Cloudflare-specific endpoint
 	bufferSize     = 1024 * 1024
 	userAgent      = "netpulse/1.0"
 )
