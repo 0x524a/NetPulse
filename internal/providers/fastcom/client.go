@@ -266,7 +266,10 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	var byteLen int64
 	var byteMux sync.Mutex
 
+	var collectorWg sync.WaitGroup
+	collectorWg.Add(1)
 	go func() {
+		defer collectorWg.Done()
 		for length := range byteLenChan {
 			byteMux.Lock()
 			byteLen += length
@@ -279,7 +282,10 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	defer ticker.Stop()
 
 	var secondPass float64
+	var tickerWg sync.WaitGroup
+	tickerWg.Add(1)
 	go func() {
+		defer tickerWg.Done()
 		defer func() { _ = recover() }()
 		for {
 			select {
@@ -326,6 +332,13 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 
 	wg.Wait()
 	once.Do(stop)
+
+	// Wait for ticker goroutine to finish
+	tickerWg.Wait()
+
+	// Close byteLenChan and wait for collector to finish
+	close(byteLenChan)
+	collectorWg.Wait()
 
 	return nil
 }
@@ -399,7 +412,10 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	var tickerWg sync.WaitGroup
+	tickerWg.Add(1)
 	go func() {
+		defer tickerWg.Done()
 		for {
 			select {
 			case <-done:
@@ -451,6 +467,8 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	}
 
 	wg.Wait()
+	// Wait for ticker goroutine to finish
+	tickerWg.Wait()
 
 	return nil
 }

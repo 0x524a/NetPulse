@@ -3,6 +3,7 @@ package speedtest
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/0x524a/netpulse/internal/config"
@@ -19,6 +20,7 @@ import (
 type SpeedTest struct {
 	config         *config.Config
 	result         *provider.Result
+	resultMu       sync.RWMutex
 	providers      []provider.Provider
 	activeProvider provider.Provider
 }
@@ -274,6 +276,7 @@ func (st *SpeedTest) runWithProvider(p provider.Provider) error {
 	}
 
 	// Store results
+	st.resultMu.Lock()
 	st.result = &provider.Result{
 		ProviderName:  p.Name(),
 		DownloadSpeed: finalSpeed,
@@ -293,17 +296,23 @@ func (st *SpeedTest) runWithProvider(p provider.Provider) error {
 		Timestamp:     time.Now(),
 		Success:       true,
 	}
+	st.resultMu.Unlock()
 
 	return nil
 }
 
 // GetResult returns the speed test result
 func (st *SpeedTest) GetResult() *provider.Result {
+	st.resultMu.RLock()
+	defer st.resultMu.RUnlock()
 	return st.result
 }
 
 // FormatResult returns a formatted string of the results
 func (st *SpeedTest) FormatResult() string {
+	st.resultMu.RLock()
+	defer st.resultMu.RUnlock()
+	
 	if st.result == nil {
 		return "No results available. Please run the test first."
 	}
