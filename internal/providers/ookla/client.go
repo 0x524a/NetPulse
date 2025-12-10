@@ -73,6 +73,10 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	var lastBytes int64
 	var lastTime time.Time
 	lastTime = time.Now()
+	
+	// Track errors
+	var errorCount int64
+	var errorMux sync.Mutex
 
 	// Timeout after 15 seconds
 	go func() {
@@ -131,7 +135,15 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 				case <-done:
 					return
 				default:
-					downloaded := c.downloadChunk()
+					downloaded, err := c.downloadChunk()
+					if err != nil {
+						errorMux.Lock()
+						errorCount++
+						errorMux.Unlock()
+						// Don't retry too quickly if there's an error
+						time.Sleep(100 * time.Millisecond)
+						continue
+					}
 					if downloaded > 0 {
 						byteMux.Lock()
 						totalBytes += downloaded
@@ -144,20 +156,37 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 
 	wg.Wait()
 	once.Do(stop)
+	
+	// Check if we got any data at all
+	byteMux.Lock()
+	finalBytes := totalBytes
+	byteMux.Unlock()
+	
+	errorMux.Lock()
+	finalErrors := errorCount
+	errorMux.Unlock()
+	
+	if finalBytes == 0 && finalErrors > 0 {
+		return errors.New("failed to download test data: all connections failed")
+	}
 
 	return nil
 }
 
 // downloadChunk downloads test data
-func (c *Client) downloadChunk() int64 {
+func (c *Client) downloadChunk() (int64, error) {
 	// Use a test file endpoint that serves larger data for accurate speed measurement
 	url := "https://cachefly.cachefly.net/100mb.test"
 
 	resp, err := c.client.Get(url)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	
+	if resp.StatusCode != http.StatusOK {
+		return 0, errors.New("non-200 response from test server")
+	}
 
 	buf := make([]byte, bufferSize)
 	var total int64
@@ -169,11 +198,11 @@ func (c *Client) downloadChunk() int64 {
 			break
 		}
 		if err != nil {
-			break
+			return total, err
 		}
 	}
 
-	return total
+	return total, nil
 }
 
 // MeasureUpload measures upload speed (implements Provider interface)
