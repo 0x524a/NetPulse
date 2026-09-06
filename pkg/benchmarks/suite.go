@@ -246,6 +246,12 @@ func (bs *BenchmarkSuite) generateRankings() {
 		providers = append(providers, name)
 	}
 
+	// Sort the base slice by name so that the (non-stable) metric sorts below
+	// start from a deterministic order. Without this, Go's randomized map
+	// iteration makes the relative order of providers tied on a metric vary
+	// between runs of identical data.
+	sort.Strings(providers)
+
 	// Each ranking below gets its own copy of the base slice. sort.Slice
 	// mutates in place, so without a copy every ranking field would end up
 	// sharing one backing array and all six fields would collapse onto
@@ -259,42 +265,42 @@ func (bs *BenchmarkSuite) generateRankings() {
 
 	// Sort by download speed
 	downloadRankings := newCopy()
-	sort.Slice(downloadRankings, func(i, j int) bool {
+	sort.SliceStable(downloadRankings, func(i, j int) bool {
 		return bs.Benchmarks[downloadRankings[i]].AvgDownloadMbps > bs.Benchmarks[downloadRankings[j]].AvgDownloadMbps
 	})
 	bs.DownloadRankings = downloadRankings
 
 	// Sort by upload speed
 	uploadRankings := newCopy()
-	sort.Slice(uploadRankings, func(i, j int) bool {
+	sort.SliceStable(uploadRankings, func(i, j int) bool {
 		return bs.Benchmarks[uploadRankings[i]].AvgUploadMbps > bs.Benchmarks[uploadRankings[j]].AvgUploadMbps
 	})
 	bs.UploadRankings = uploadRankings
 
 	// Sort by latency (lower is better)
 	latencyRankings := newCopy()
-	sort.Slice(latencyRankings, func(i, j int) bool {
+	sort.SliceStable(latencyRankings, func(i, j int) bool {
 		return bs.Benchmarks[latencyRankings[i]].AvgLatencyMs < bs.Benchmarks[latencyRankings[j]].AvgLatencyMs
 	})
 	bs.LatencyRankings = latencyRankings
 
 	// Sort by reliability
 	reliabilityRankings := newCopy()
-	sort.Slice(reliabilityRankings, func(i, j int) bool {
+	sort.SliceStable(reliabilityRankings, func(i, j int) bool {
 		return bs.Benchmarks[reliabilityRankings[i]].Reliability > bs.Benchmarks[reliabilityRankings[j]].Reliability
 	})
 	bs.ReliabilityRankings = reliabilityRankings
 
 	// Sort by consistency
 	consistencyRankings := newCopy()
-	sort.Slice(consistencyRankings, func(i, j int) bool {
+	sort.SliceStable(consistencyRankings, func(i, j int) bool {
 		return bs.Benchmarks[consistencyRankings[i]].Consistency > bs.Benchmarks[consistencyRankings[j]].Consistency
 	})
 	bs.ConsistencyRankings = consistencyRankings
 
 	// Sort by overall performance score
 	orderedProviders := newCopy()
-	sort.Slice(orderedProviders, func(i, j int) bool {
+	sort.SliceStable(orderedProviders, func(i, j int) bool {
 		return bs.ProviderScores[orderedProviders[i]] > bs.ProviderScores[orderedProviders[j]]
 	})
 	bs.OrderedProviders = orderedProviders
@@ -322,7 +328,19 @@ func (bs *BenchmarkSuite) GetComparison(metric string) *DetailedComparison {
 
 	var maxValue float64
 	minValue := math.MaxFloat64
-	for _, benchmark := range bs.Benchmarks {
+
+	// Iterate in sorted name order rather than map order: Go randomizes map
+	// iteration per call, and the sorts below are not stable, so providers
+	// tied on a metric would otherwise be ranked differently between runs of
+	// the same data.
+	names := make([]string, 0, len(bs.Benchmarks))
+	for name := range bs.Benchmarks {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		benchmark := bs.Benchmarks[name]
 		var value float64
 		switch metric {
 		case "download":
@@ -355,14 +373,16 @@ func (bs *BenchmarkSuite) GetComparison(metric string) *DetailedComparison {
 	}
 
 	// Calculate rank and percentage
+	// SliceStable so that providers tied on this metric keep the sorted-name
+	// order established above, making the ranking reproducible.
 	if metric == "latency" || metric == "jitter" {
 		// For latency/jitter, lower is better
-		sort.Slice(comp.Providers, func(i, j int) bool {
+		sort.SliceStable(comp.Providers, func(i, j int) bool {
 			return comp.Providers[i].Value < comp.Providers[j].Value
 		})
 	} else {
 		// For other metrics, higher is better
-		sort.Slice(comp.Providers, func(i, j int) bool {
+		sort.SliceStable(comp.Providers, func(i, j int) bool {
 			return comp.Providers[i].Value > comp.Providers[j].Value
 		})
 	}
