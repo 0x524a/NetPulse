@@ -199,10 +199,10 @@ func (c *Client) runAllProviders() (*Result, error) {
 		}
 
 		c.results = append(c.results, result)
-		
+
 		if c.config.Verbose {
 			fmt.Printf("✅ Completed %s: ↓ %.2f Mbps  ↑ %.2f Mbps  Latency: %.2f ms\n",
-				provider, result.DownloadSpeed, result.UploadSpeed, 
+				provider, result.DownloadSpeed, result.UploadSpeed,
 				float64(result.Latency.Microseconds())/1000.0)
 		}
 	}
