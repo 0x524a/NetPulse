@@ -1,6 +1,7 @@
 package benchmarks
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -51,6 +52,10 @@ func (bs *BenchmarkSuite) Finalize() error {
 	bs.EndTime = time.Now()
 	bs.TotalDuration = bs.EndTime.Sub(bs.StartTime)
 
+	if len(bs.Benchmarks) == 0 {
+		return errors.New("cannot finalize benchmark suite: no benchmarks recorded")
+	}
+
 	// Calculate aggregates for each provider
 	for providerName, benchmark := range bs.Benchmarks {
 		if benchmark.NumTests == 0 {
@@ -83,11 +88,12 @@ func (bs *BenchmarkSuite) Finalize() error {
 				if result.UploadMbps > benchmark.MaxUploadMbps {
 					benchmark.MaxUploadMbps = result.UploadMbps
 				}
-				if result.Latency.Milliseconds() < int64(benchmark.MinLatencyMs) {
-					benchmark.MinLatencyMs = float64(result.Latency.Milliseconds())
+				latencyMs := float64(result.Latency.Milliseconds())
+				if latencyMs < benchmark.MinLatencyMs {
+					benchmark.MinLatencyMs = latencyMs
 				}
-				if result.Latency.Milliseconds() > int64(benchmark.MaxLatencyMs) {
-					benchmark.MaxLatencyMs = float64(result.Latency.Milliseconds())
+				if latencyMs > benchmark.MaxLatencyMs {
+					benchmark.MaxLatencyMs = latencyMs
 				}
 			}
 		}
@@ -240,41 +246,58 @@ func (bs *BenchmarkSuite) generateRankings() {
 		providers = append(providers, name)
 	}
 
+	// Each ranking below gets its own copy of the base slice. sort.Slice
+	// mutates in place, so without a copy every ranking field would end up
+	// sharing one backing array and all six fields would collapse onto
+	// whichever sort ran last (see BENCHMARK_FEATURES.md's "Seven Separate
+	// Rankings" feature).
+	newCopy := func() []string {
+		c := make([]string, len(providers))
+		copy(c, providers)
+		return c
+	}
+
 	// Sort by download speed
-	sort.Slice(providers, func(i, j int) bool {
-		return bs.Benchmarks[providers[i]].AvgDownloadMbps > bs.Benchmarks[providers[j]].AvgDownloadMbps
+	downloadRankings := newCopy()
+	sort.Slice(downloadRankings, func(i, j int) bool {
+		return bs.Benchmarks[downloadRankings[i]].AvgDownloadMbps > bs.Benchmarks[downloadRankings[j]].AvgDownloadMbps
 	})
-	bs.DownloadRankings = providers
+	bs.DownloadRankings = downloadRankings
 
 	// Sort by upload speed
-	sort.Slice(providers, func(i, j int) bool {
-		return bs.Benchmarks[providers[i]].AvgUploadMbps > bs.Benchmarks[providers[j]].AvgUploadMbps
+	uploadRankings := newCopy()
+	sort.Slice(uploadRankings, func(i, j int) bool {
+		return bs.Benchmarks[uploadRankings[i]].AvgUploadMbps > bs.Benchmarks[uploadRankings[j]].AvgUploadMbps
 	})
-	bs.UploadRankings = providers
+	bs.UploadRankings = uploadRankings
 
 	// Sort by latency (lower is better)
-	sort.Slice(providers, func(i, j int) bool {
-		return bs.Benchmarks[providers[i]].AvgLatencyMs < bs.Benchmarks[providers[j]].AvgLatencyMs
+	latencyRankings := newCopy()
+	sort.Slice(latencyRankings, func(i, j int) bool {
+		return bs.Benchmarks[latencyRankings[i]].AvgLatencyMs < bs.Benchmarks[latencyRankings[j]].AvgLatencyMs
 	})
-	bs.LatencyRankings = providers
+	bs.LatencyRankings = latencyRankings
 
 	// Sort by reliability
-	sort.Slice(providers, func(i, j int) bool {
-		return bs.Benchmarks[providers[i]].Reliability > bs.Benchmarks[providers[j]].Reliability
+	reliabilityRankings := newCopy()
+	sort.Slice(reliabilityRankings, func(i, j int) bool {
+		return bs.Benchmarks[reliabilityRankings[i]].Reliability > bs.Benchmarks[reliabilityRankings[j]].Reliability
 	})
-	bs.ReliabilityRankings = providers
+	bs.ReliabilityRankings = reliabilityRankings
 
 	// Sort by consistency
-	sort.Slice(providers, func(i, j int) bool {
-		return bs.Benchmarks[providers[i]].Consistency > bs.Benchmarks[providers[j]].Consistency
+	consistencyRankings := newCopy()
+	sort.Slice(consistencyRankings, func(i, j int) bool {
+		return bs.Benchmarks[consistencyRankings[i]].Consistency > bs.Benchmarks[consistencyRankings[j]].Consistency
 	})
-	bs.ConsistencyRankings = providers
+	bs.ConsistencyRankings = consistencyRankings
 
 	// Sort by overall performance score
-	sort.Slice(providers, func(i, j int) bool {
-		return bs.ProviderScores[providers[i]] > bs.ProviderScores[providers[j]]
+	orderedProviders := newCopy()
+	sort.Slice(orderedProviders, func(i, j int) bool {
+		return bs.ProviderScores[orderedProviders[i]] > bs.ProviderScores[orderedProviders[j]]
 	})
-	bs.OrderedProviders = providers
+	bs.OrderedProviders = orderedProviders
 }
 
 // GetBestProvider returns the best performing provider
@@ -298,6 +321,7 @@ func (bs *BenchmarkSuite) GetComparison(metric string) *DetailedComparison {
 	}
 
 	var maxValue float64
+	minValue := math.MaxFloat64
 	for _, benchmark := range bs.Benchmarks {
 		var value float64
 		switch metric {
@@ -319,6 +343,9 @@ func (bs *BenchmarkSuite) GetComparison(metric string) *DetailedComparison {
 
 		if value > maxValue {
 			maxValue = value
+		}
+		if value < minValue {
+			minValue = value
 		}
 
 		comp.Providers = append(comp.Providers, ProviderComparisonPoint{
@@ -342,7 +369,23 @@ func (bs *BenchmarkSuite) GetComparison(metric string) *DetailedComparison {
 
 	for i := range comp.Providers {
 		comp.Providers[i].Rank = i + 1
-		if maxValue > 0 {
+
+		if metric == "latency" || metric == "jitter" {
+			// Lower is better for these metrics, so the percentage must be
+			// relative to the best (lowest) value: the best provider gets
+			// 100%, and slower providers get proportionally less - matching
+			// BENCHMARK_FEATURES.md's documented semantics and sample
+			// output. Dividing by maxValue (the worst provider) as before
+			// inverted this, giving the best provider the lowest percentage.
+			v := comp.Providers[i].Value
+			switch {
+			case v > 0:
+				comp.Providers[i].Percentage = (minValue / v) * 100
+			case minValue == 0:
+				// All providers tie at 0ms - all are equally best.
+				comp.Providers[i].Percentage = 100
+			}
+		} else if maxValue > 0 {
 			comp.Providers[i].Percentage = (comp.Providers[i].Value / maxValue) * 100
 		}
 	}
