@@ -17,7 +17,6 @@ dist/
 speedtest_results.txt
 benchmark_results.txt
 results*.txt
-*.txt
 
 # IDE
 .vscode/
@@ -38,8 +37,10 @@ coverage.out
 .cache/
 
 # Git
-.git/
 .gitmodules
+
+# Serena
+.serena/
 
 # Build artifacts
 .goreleaser/

@@ -12,11 +12,29 @@ import (
 	"github.com/0x524a/netpulse/pkg/speedtest"
 )
 
+// Version, Commit, and Date are set via -ldflags at build time
+// (see .github/workflows/release.yml and .goreleaser.yml).
+var (
+	Version = "dev"
+	Commit  = "none"
+	Date    = "unknown"
+)
+
+// versionString builds the version string shown to users, including the
+// commit and build date when they were injected at build time.
+func versionString() string {
+	v := Version
+	if Commit != "none" || Date != "unknown" {
+		v += fmt.Sprintf(" (commit: %s, built: %s)", Commit, Date)
+	}
+	return v
+}
+
 func main() {
 	app := &cli.App{
 		Name:    "speedtest",
 		Usage:   "Internet Speed Test Client",
-		Version: "1.0.0",
+		Version: versionString(),
 		Authors: []*cli.Author{
 			{
 				Name: "Speed Test Client",
@@ -224,7 +242,7 @@ func cmdBenchmark(c *cli.Context) error {
 
 	providers := []string{"fastcom", "cloudflare", "mlab", "librespeed", "ookla"}
 	totalProviders := len(providers)
-	
+
 	fmt.Println("Internet Speed Test Client - Provider Benchmark")
 	fmt.Println("==============================================")
 	fmt.Println()
