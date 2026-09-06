@@ -1,6 +1,24 @@
 package provider
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrUploadNotSupported is returned by MeasureUpload for providers whose
+// service genuinely exposes no upload endpoint. Fast.com is the case in point:
+// its public API is download-only, so an honest client reports the absence
+// rather than measuring an unrelated host and presenting the number as the
+// provider's upload speed. Callers should treat this as "no data", not as a
+// test failure.
+var ErrUploadNotSupported = errors.New("upload measurement is not supported by this provider")
+
+// ErrProviderUnavailable is returned by Init when a provider cannot run in the
+// current environment for a reason the user could act on -- for example, the
+// Ookla provider requires Ookla's own official speedtest binary to be
+// installed, because reimplementing their wire protocol is not permitted by
+// their terms of use.
+var ErrProviderUnavailable = errors.New("provider is not available in this environment")
 
 // Provider defines the interface that all speed test providers must implement
 type Provider interface {
