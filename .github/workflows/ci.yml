@@ -6,6 +6,20 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+# Windows runners default to PowerShell, which mangles Go's flag syntax: it
+# split `-coverprofile=coverage.out` into two arguments, so `go test` tried to
+# resolve `.out` as a package and every Windows cell failed with
+# "no required module provides package .out". Pinning bash everywhere keeps
+# one command form valid on all three operating systems.
+defaults:
+  run:
+    shell: bash
+
+# Don't let superseded runs keep burning a 6-cell matrix after a new push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}

@@ -1,4 +1,8 @@
-version: 2
+# Must be a quoted string: golangci-lint v2 validates this file against a
+# JSON schema that types `version` as a string, and an unquoted 2 is parsed as
+# a YAML number, which fails `golangci-lint config verify` before any linting
+# happens.
+version: "2"
 
 run:
   timeout: 5m
