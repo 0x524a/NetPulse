@@ -22,20 +22,44 @@ type SpeedTest struct {
 	result         *provider.Result
 	resultMu       sync.RWMutex
 	providers      []provider.Provider
+	providerBySlug map[string]provider.Provider
 	activeProvider provider.Provider
 }
 
-// New creates a new SpeedTest instance
-func New(cfg *config.Config) *SpeedTest {
-	return &SpeedTest{
-		config: cfg,
-		providers: []provider.Provider{
+// providerSlugs are the identifiers users pass to --provider, in the order
+// they are tried during "auto" fallback. Keeping the slug next to the
+// constructor is what makes `--provider <slug>` resolution independent of
+// whatever human-readable string a provider's Name() happens to return.
+//
+// The previous code compared config.Provider against a hardcoded display name
+// per slug and then matched that against p.Name(). Renaming a provider (for
+// instance to "Speedtest.net (Ookla official CLI)") silently broke
+// `--provider ookla` with "provider not found", because the duplicated literal
+// no longer agreed with Name().
+func newProviders() ([]string, []provider.Provider) {
+	return []string{"fastcom", "cloudflare", "mlab", "librespeed", "ookla"},
+		[]provider.Provider{
 			fastcom.New(),
 			cloudflare.New(),
 			mlab.New(),
 			librespeed.New(),
 			ookla.New(),
-		},
+		}
+}
+
+// New creates a new SpeedTest instance
+func New(cfg *config.Config) *SpeedTest {
+	slugs, providers := newProviders()
+
+	bySlug := make(map[string]provider.Provider, len(slugs))
+	for i, slug := range slugs {
+		bySlug[slug] = providers[i]
+	}
+
+	return &SpeedTest{
+		config:         cfg,
+		providers:      providers,
+		providerBySlug: bySlug,
 	}
 }
 
@@ -62,40 +86,29 @@ func (st *SpeedTest) Run() error {
 
 	// If specific provider requested, use only that one
 	if st.config.Provider != "auto" {
-		for _, p := range st.providers {
-			providerName := ""
-			switch st.config.Provider {
-			case "fastcom":
-				providerName = "Fast.com"
-			case "cloudflare":
-				providerName = "Cloudflare"
-			case "mlab":
-				providerName = "M-Lab"
-			case "librespeed":
-				providerName = "LibreSpeed"
-			case "ookla":
-				providerName = "Speedtest.net (Ookla)"
-			}
-
-			if p.Name() == providerName {
-				// Check availability
-				if !p.IsAvailable() {
-					if st.config.Verbose {
-						fmt.Printf("%s is not currently available\n", providerName)
-					}
-					return fmt.Errorf("provider '%s' is not available", st.config.Provider)
-				}
-
-				// Initialize provider
-				if err := p.Init(); err != nil {
-					return fmt.Errorf("failed to initialize provider '%s': %w", st.config.Provider, err)
-				}
-
-				st.activeProvider = p
-				return st.runWithProvider(p)
-			}
+		p, ok := st.providerBySlug[st.config.Provider]
+		if !ok {
+			return fmt.Errorf("provider '%s' not found", st.config.Provider)
 		}
-		return fmt.Errorf("provider '%s' not found", st.config.Provider)
+
+		// Initialize first: a provider may be unavailable for a reason the
+		// user can act on (the Ookla provider, for example, requires Ookla's
+		// own official CLI to be installed, because their terms do not permit
+		// reimplementing the protocol). Init's error explains what to do,
+		// whereas IsAvailable can only say yes or no.
+		if err := p.Init(); err != nil {
+			return fmt.Errorf("failed to initialize provider '%s': %w", st.config.Provider, err)
+		}
+
+		if !p.IsAvailable() {
+			if st.config.Verbose {
+				fmt.Printf("%s is not currently available\n", p.Name())
+			}
+			return fmt.Errorf("provider '%s' is not available", st.config.Provider)
+		}
+
+		st.activeProvider = p
+		return st.runWithProvider(p)
 	}
 
 	// Try each provider until one succeeds
@@ -312,7 +325,7 @@ func (st *SpeedTest) GetResult() *provider.Result {
 func (st *SpeedTest) FormatResult() string {
 	st.resultMu.RLock()
 	defer st.resultMu.RUnlock()
-	
+
 	if st.result == nil {
 		return "No results available. Please run the test first."
 	}
