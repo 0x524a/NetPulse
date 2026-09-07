@@ -1,8 +1,16 @@
+// Package fastcom implements a speedtest provider backed by fast.com.
+//
+// fast.com genuinely performs token/endpoint discovery against Netflix's
+// undocumented speedtest API (see Init and extractToken below) and measures
+// real download throughput against the returned targets. It does NOT
+// support upload measurement: fast.com's public API is download-only, and
+// MeasureUpload reports that honestly via provider.ErrUploadNotSupported
+// instead of measuring an unrelated third-party host and mislabeling the
+// result.
 package fastcom
 
 import (
 	"bytes"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -13,23 +21,43 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+
+	"github.com/0x524a/netpulse/internal/providers/provider"
 )
 
 const (
-	endpoint          = "https://fast.com"
-	bufferSize        = 8192
-	userAgent         = "netpulse/1.0"
-	measureTimeoutMin = 10
-	measureTimeoutMax = 30
+	endpoint   = "https://fast.com"
+	bufferSize = 8192
+	userAgent  = "netpulse/1.0"
+
+	// downloadMeasureDuration is how long MeasureDownload keeps pulling data
+	// before it stops and reports. This used to be two separate hardcoded
+	// values (a 10s "minimum" and a 30s "hard cap"); consolidated to one.
+	//
+	// TODO(wave2): this should be a configurable value passed in by the
+	// caller (like MeasureUpload's duration parameter), not a fixed
+	// per-provider constant.
+	downloadMeasureDuration = 10 * time.Second
 )
 
 var (
 	ErrAPI      = errors.New("fast.com API error. Please try again later")
 	ErrInternet = errors.New("internet error. Please try again later")
 
+	// ErrTokenNotFound is returned when the speedtest auth token can't be
+	// located in fast.com's served JS bundle. See extractToken.
+	ErrTokenNotFound = errors.New("fastcom: could not locate speedtest token in fast.com bundle (site may have changed)")
+
+	// ErrEndpointNotFound is returned when the API endpoint can't be located
+	// in fast.com's served JS bundle.
+	ErrEndpointNotFound = errors.New("fastcom: could not locate api endpoint in fast.com bundle (site may have changed)")
+
 	reEndpoint = regexp.MustCompile(`apiEndpoint="([\w|\/|\.]*)"`)
-	reToken    = regexp.MustCompile(`token:"(\w*)"`)
-	reCount    = regexp.MustCompile(`urlCount:(\d*)`)
+	// reToken matches the `token:"<value>"` key/value pair as it appears in
+	// fast.com's minified JS bundle. See extractToken for details on why
+	// this is fragile.
+	reToken = regexp.MustCompile(`token:"(\w*)"`)
+	reCount = regexp.MustCompile(`urlCount:(\d*)`)
 )
 
 // Client represents a fast.com speed test client
@@ -39,6 +67,8 @@ type Client struct {
 	urlCount int
 	client   *http.Client
 }
+
+var _ provider.Provider = (*Client)(nil)
 
 // New creates a new fast.com client
 func New() *Client {
@@ -143,29 +173,58 @@ func (c *Client) findScriptSrc(htmlData []byte) (string, error) {
 	return scriptSrc, nil
 }
 
+// extractToken scrapes fast.com's speedtest auth token out of its served JS
+// bundle.
+//
+// This token is NOT available from any documented endpoint or public API
+// listing -- Netflix embeds it as a literal string inside their minified,
+// client-side JS bundle (the file referenced by the <script src="/app-*.js">
+// tag on https://fast.com). As last verified against the live bundle, it
+// appears as an object literal member shaped like:
+//
+//	DEFAULT_PARAMS={https:!0,token:"YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm",urlCount:3,...}
+//
+// i.e. the object key is literally `token`, followed by a double-quoted
+// alphanumeric value: the pattern `token:"(\w*)"` (see reToken). Netflix has
+// reshaped this bundle before with no notice and no changelog, and there is
+// nothing to validate the extracted value against ahead of time -- if this
+// stops matching, that means the bundle's shape changed, not that the
+// network is down, so we return a specific error rather than a generic one.
+func (c *Client) extractToken(jsData []byte) (string, error) {
+	matches := reToken.FindSubmatch(jsData)
+	if len(matches) < 2 || len(matches[1]) == 0 {
+		return "", fmt.Errorf("%w: pattern `token:\"(\\w*)\"` had no match", ErrTokenNotFound)
+	}
+	return string(matches[1]), nil
+}
+
 // parseJSData extracts token, API endpoint, and URL count from JavaScript
 func (c *Client) parseJSData(jsData []byte) error {
 	// Extract API endpoint
 	matches := reEndpoint.FindSubmatch(jsData)
-	if len(matches) < 2 {
-		return ErrAPI
+	if len(matches) < 2 || len(matches[1]) == 0 {
+		return fmt.Errorf("%w: pattern `apiEndpoint=\"...\"` had no match", ErrEndpointNotFound)
 	}
 	c.apiURL = "https://" + string(matches[1])
 
-	// Extract token
-	matches = reToken.FindSubmatch(jsData)
-	if len(matches) < 2 {
-		return ErrAPI
+	// Extract token (isolated: see extractToken doc comment on why this is
+	// the fragile part of discovery)
+	token, err := c.extractToken(jsData)
+	if err != nil {
+		return err
 	}
-	c.token = string(matches[1])
+	c.token = token
 
-	// Extract URL count
+	// Extract URL count. This one is not critical -- fall back to the
+	// client's existing default if the pattern isn't found.
 	matches = reCount.FindSubmatch(jsData)
-	if len(matches) < 2 {
-		c.urlCount = 5 // default
+	if len(matches) < 2 || len(matches[1]) == 0 {
+		if c.urlCount <= 0 {
+			c.urlCount = 5 // default
+		}
 	} else {
 		count, err := strconv.Atoi(string(matches[1]))
-		if err == nil {
+		if err == nil && count > 0 {
 			c.urlCount = count
 		}
 	}
@@ -173,7 +232,8 @@ func (c *Client) parseJSData(jsData []byte) error {
 	return nil
 }
 
-// GetURLs fetches the test URLs from the API
+// GetURLs fetches the test URLs from the API. If count <= 0, the client's
+// own discovered/default urlCount is used instead.
 func (c *Client) GetURLs(count int) ([]string, error) {
 	if c.token == "" || c.apiURL == "" {
 		return nil, errors.New("client not initialized, call Init() first")
@@ -191,6 +251,10 @@ func (c *Client) GetURLs(count int) ([]string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%w: unexpected status %d from speedtest API", ErrAPI, resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, ErrInternet
@@ -199,7 +263,7 @@ func (c *Client) GetURLs(count int) ([]string, error) {
 	// Parse JSON response to extract URLs
 	urls, err := c.parseURLsFromJSON(body)
 	if err != nil {
-		return nil, ErrAPI
+		return nil, err
 	}
 
 	return urls, nil
@@ -212,7 +276,7 @@ func (c *Client) parseURLsFromJSON(data []byte) ([]string, error) {
 	matches := reURL.FindAllSubmatch(data, -1)
 
 	if len(matches) == 0 {
-		return nil, ErrAPI
+		return nil, fmt.Errorf("%w: no targets in response", ErrAPI)
 	}
 
 	urls := make([]string, 0, len(matches))
@@ -227,7 +291,10 @@ func (c *Client) parseURLsFromJSON(data []byte) ([]string, error) {
 
 // MeasureDownload measures download speed (implements Provider interface)
 func (c *Client) MeasureDownload(speedChan chan<- float64) error {
-	urls, err := c.GetURLs(0)
+	// Use the client's own discovered/default urlCount explicitly, rather
+	// than relying on GetURLs's count<=0 "use the client's default" fallback
+	// implicitly.
+	urls, err := c.GetURLs(c.urlCount)
 	if err != nil {
 		return err
 	}
@@ -236,37 +303,22 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	}
 
 	done := make(chan struct{})
+	var stopOnce sync.Once
+	stop := func() { stopOnce.Do(func() { close(done) }) }
+
+	// Single hard timeout for the whole measurement window.
+	timer := time.AfterFunc(downloadMeasureDuration, stop)
+	defer timer.Stop()
+
 	byteLenChan := make(chan int64, 100)
-
-	// Stop function
-	var once sync.Once
-	stop := func() {
-		close(done)
-	}
-
-	// Timeout handling
-	isTimeout := false
-	var timeoutMux sync.Mutex
-
-	// Min timeout
-	go func() {
-		time.Sleep(measureTimeoutMin * time.Second)
-		timeoutMux.Lock()
-		isTimeout = true
-		timeoutMux.Unlock()
-	}()
-
-	// Max timeout
-	go func() {
-		time.Sleep(measureTimeoutMax * time.Second)
-		once.Do(stop)
-	}()
 
 	// Collect bytes
 	var byteLen int64
 	var byteMux sync.Mutex
 
+	collectDone := make(chan struct{})
 	go func() {
+		defer close(collectDone)
 		for length := range byteLenChan {
 			byteMux.Lock()
 			byteLen += length
@@ -278,17 +330,18 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	var secondPass float64
+	var secondsPassed float64
+	reportDone := make(chan struct{})
 	go func() {
-		defer func() { _ = recover() }()
+		defer close(reportDone)
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
-				secondPass++
+				secondsPassed++
 				byteMux.Lock()
-				avgKbps := float64(byteLen) * 8 / 1000 / secondPass
+				avgKbps := float64(byteLen) * 8 / 1000 / secondsPassed
 				byteMux.Unlock()
 
 				select {
@@ -302,35 +355,41 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 
 	// Start downloading from URLs
 	var wg sync.WaitGroup
-	for i, url := range urls {
+	for _, url := range urls {
 		wg.Add(1)
-		go func(index int, downloadURL string) {
+		go func(downloadURL string) {
 			defer wg.Done()
 
 			for {
-				timeoutMux.Lock()
-				timeout := isTimeout
-				timeoutMux.Unlock()
-
-				if timeout {
-					break
+				select {
+				case <-done:
+					return
+				default:
 				}
 
-				err := c.download(downloadURL, byteLenChan, done)
-				if err != nil {
-					break
+				if err := c.download(downloadURL, byteLenChan, done); err != nil {
+					return
 				}
 			}
-		}(i, url)
+		}(url)
 	}
 
 	wg.Wait()
-	once.Do(stop)
+	stop()
+
+	// No more writers remain (all download goroutines have returned), so
+	// it's safe to close byteLenChan and wait for the collector/reporter
+	// goroutines to observe done and exit cleanly rather than leaking them.
+	close(byteLenChan)
+	<-collectDone
+	<-reportDone
 
 	return nil
 }
 
-// download downloads data from a URL and reports byte counts
+// download downloads data from a URL and reports byte counts. Only bytes
+// from a successful (2xx) response are counted; a non-2xx response (e.g. a
+// 404/405 error page body) contributes zero bytes.
 func (c *Client) download(url string, byteLenChan chan<- int64, done <-chan struct{}) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -343,6 +402,10 @@ func (c *Client) download(url string, byteLenChan chan<- int64, done <-chan stru
 		return ErrInternet
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("%w: download request returned status %d", ErrAPI, resp.StatusCode)
+	}
 
 	buf := make([]byte, bufferSize)
 
@@ -365,117 +428,17 @@ func (c *Client) download(url string, byteLenChan chan<- int64, done <-chan stru
 	}
 }
 
-// MeasureUpload measures upload speed (implements Provider interface)
-func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64) error {
-	urls, err := c.GetURLs(0)
-	if err != nil {
-		return err
-	}
-	if len(urls) == 0 {
-		return errors.New("no URLs provided")
-	}
-
-	// Use a subset of URLs for upload
-	uploadURLs := urls
-	if len(uploadURLs) > 3 {
-		uploadURLs = uploadURLs[:3]
-	}
-
-	done := make(chan struct{})
-	var wg sync.WaitGroup
-
-	// Track total bytes uploaded
-	var totalBytes int64
-	var byteMux sync.Mutex
-	startTime := time.Now()
-
-	// Stop after duration
-	go func() {
-		time.Sleep(duration)
-		close(done)
-	}()
-
-	// Report speed every second
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				elapsed := time.Since(startTime).Seconds()
-				if elapsed > 0 {
-					byteMux.Lock()
-					kbps := (float64(totalBytes) * 8) / 1000 / elapsed
-					byteMux.Unlock()
-
-					select {
-					case speedChan <- kbps:
-					case <-done:
-						return
-					}
-				}
-			}
-		}
-	}()
-
-	// Create random data to upload (1MB chunks)
-	chunkSize := 1024 * 1024
-	data := make([]byte, chunkSize)
-	if _, err := rand.Read(data); err != nil {
-		return err
-	}
-
-	// Upload to multiple URLs concurrently
-	for _, url := range uploadURLs {
-		wg.Add(1)
-		go func(uploadURL string) {
-			defer wg.Done()
-
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					uploaded := c.uploadChunk(uploadURL, data)
-					if uploaded > 0 {
-						byteMux.Lock()
-						totalBytes += uploaded
-						byteMux.Unlock()
-					}
-				}
-			}
-		}(url)
-	}
-
-	wg.Wait()
-
-	return nil
-}
-
-// uploadChunk uploads a chunk of data to a URL
-func (c *Client) uploadChunk(url string, data []byte) int64 {
-	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
-	if err != nil {
-		return 0
-	}
-
-	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("User-Agent", userAgent)
-	req.ContentLength = int64(len(data))
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return 0
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Discard response body
-	_, _ = io.Copy(io.Discard, resp.Body)
-
-	return int64(len(data))
+// MeasureUpload measures upload speed (implements Provider interface).
+//
+// fast.com's public API is download-only: every URL returned by the
+// speedtest API accepts GET and nothing else. There is no endpoint,
+// documented or otherwise, that accepts uploaded data -- this was checked
+// against several independent unofficial fast.com clients before concluding
+// there simply isn't one. Rather than substitute an unrelated third-party
+// host and mislabel its throughput as "Fast.com upload", this reports the
+// absence honestly via provider.ErrUploadNotSupported.
+func (c *Client) MeasureUpload(_ time.Duration, _ chan<- float64) error {
+	return fmt.Errorf("fastcom: %w", provider.ErrUploadNotSupported)
 }
 
 // MeasureLatency measures the round-trip time to fast.com (implements Provider interface)
@@ -490,13 +453,17 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 	return time.Since(start), nil
 }
 
-// MeasureJitter measures latency variation
+// MeasureJitter measures latency variation as the mean absolute deviation
+// of round-trip times, in full nanosecond precision (no truncation to
+// whole milliseconds, so sub-millisecond jitter is still reported). Returns
+// an error -- not a silent (0, nil) -- if fewer than 2 samples succeed,
+// since that's "we couldn't measure this", not "jitter is zero".
 func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 	if samples <= 1 {
 		samples = 10
 	}
 
-	var measurements []time.Duration
+	measurements := make([]time.Duration, 0, samples)
 	for i := 0; i < samples; i++ {
 		start := time.Now()
 		resp, err := c.client.Get(endpoint)
@@ -508,26 +475,24 @@ func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 		measurements = append(measurements, time.Since(start))
 	}
 
-	if len(measurements) <= 1 {
-		return 0, nil
+	if len(measurements) < 2 {
+		return 0, fmt.Errorf("fastcom: jitter requires at least 2 successful latency samples, got %d", len(measurements))
 	}
 
-	// Calculate jitter as mean absolute deviation
-	var sumLatency int64
+	var sumLatency time.Duration
 	for _, m := range measurements {
-		sumLatency += m.Milliseconds()
+		sumLatency += m
 	}
-	meanLatency := sumLatency / int64(len(measurements))
+	meanLatency := sumLatency / time.Duration(len(measurements))
 
-	var totalDeviation int64
+	var totalDeviation time.Duration
 	for _, m := range measurements {
-		diff := m.Milliseconds() - meanLatency
+		diff := m - meanLatency
 		if diff < 0 {
 			diff = -diff
 		}
 		totalDeviation += diff
 	}
 
-	jitterMs := totalDeviation / int64(len(measurements))
-	return time.Duration(jitterMs * 1000000), nil // Convert back to nanoseconds
+	return totalDeviation / time.Duration(len(measurements)), nil
 }
