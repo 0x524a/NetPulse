@@ -2,6 +2,8 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -397,4 +399,93 @@ func TestFetchEdgeMetadataLive(t *testing.T) {
 		t.Fatalf("FetchEdgeMetadata() error: %v", err)
 	}
 	t.Logf("Edge metadata: %+v", meta)
+}
+
+// TestDownloadSizesRespectServerCap guards a bug found by running the real
+// binary: /__down?bytes=100000000 returns 403 Forbidden from the live edge,
+// and Cloudflare's published schedule ends at exactly that value. Any link
+// fast enough to reach the last schedule entry failed the whole measurement.
+func TestDownloadSizesRespectServerCap(t *testing.T) {
+	for _, n := range downloadSizes {
+		if n > maxDownloadBytes {
+			t.Errorf("downloadSizes contains %d, above the server cap of %d; "+
+				"the live endpoint answers 403 for such requests", n, maxDownloadBytes)
+		}
+	}
+}
+
+// TestDownloadURLClampsOversizedRequest ensures the clamp holds even if the
+// schedule is later edited past the cap.
+func TestDownloadURLClampsOversizedRequest(t *testing.T) {
+	c := New()
+	got := c.downloadURL(500_000_000)
+	want := fmt.Sprintf("%s/__down?bytes=%d", c.baseURL, maxDownloadBytes)
+	if got != want {
+		t.Errorf("downloadURL(500000000) = %q, want clamped %q", got, want)
+	}
+}
+
+// TestMeasureDownloadRateLimitedReportsErrorNotSpeed is the regression test
+// for a bug introduced while fixing the 403: retrying a 429 inside the
+// measurement loop made backoff sleeps count toward elapsed wall-clock while
+// adding no bytes, so a rate-limited run reported ~16.88 Mbps (a single
+// sample) on a link that measures ~800 Mbps. An understated number that looks
+// real is worse than a failure, so a rate limit must surface as ErrRateLimited
+// and no measurement at all.
+func TestMeasureDownloadRateLimitedReportsErrorNotSpeed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "1")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	orig := downloadTestDuration
+	downloadTestDuration = 2 * time.Second
+	defer func() { downloadTestDuration = orig }()
+
+	c := newWithBaseURL(srv.URL)
+	speedChan := make(chan float64, 64)
+	var samples []float64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for s := range speedChan {
+			samples = append(samples, s)
+		}
+	}()
+
+	err := c.MeasureDownload(speedChan)
+	close(speedChan)
+	<-done
+
+	if err == nil {
+		t.Fatal("expected an error when every request is rate limited")
+	}
+	if !errors.Is(err, ErrRateLimited) {
+		t.Errorf("error %v does not wrap ErrRateLimited", err)
+	}
+	for _, s := range samples {
+		if s > 0 {
+			t.Errorf("reported a non-zero speed sample (%v) despite being rate limited", s)
+		}
+	}
+}
+
+// TestClassifyTransferErrorDistinguishesTransientFromPermanent ensures the 403
+// returned for an oversized request is not mislabeled as a rate limit.
+func TestClassifyTransferErrorDistinguishesTransientFromPermanent(t *testing.T) {
+	rateLimited := &statusError{op: "download", status: "429 Too Many Requests", code: 429}
+	if got := classifyTransferError(rateLimited); !errors.Is(got, ErrRateLimited) {
+		t.Errorf("429 classified as %v, want ErrRateLimited", got)
+	}
+
+	forbidden := &statusError{op: "download", status: "403 Forbidden", code: 403}
+	if got := classifyTransferError(forbidden); errors.Is(got, ErrRateLimited) {
+		t.Errorf("403 was classified as a rate limit; it is a permanent refusal")
+	}
+
+	serverErr := &statusError{op: "upload", status: "503 Service Unavailable", code: 503}
+	if got := classifyTransferError(serverErr); !errors.Is(got, ErrRateLimited) {
+		t.Errorf("503 classified as %v, want ErrRateLimited", got)
+	}
 }
