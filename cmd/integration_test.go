@@ -30,10 +30,10 @@ func TestIntegrationFastcom(t *testing.T) {
 		return
 	}
 
-	if result.DownloadMbps <= 0 {
+	if result.DownloadSpeed <= 0 {
 		t.Error("Expected positive download speed")
 	}
-	t.Logf("Used provider: %s", result.ProviderName)
+	t.Logf("Used provider: %s", result.Provider)
 }
 
 func TestIntegrationAutoFallback(t *testing.T) {
@@ -52,7 +52,7 @@ func TestIntegrationAutoFallback(t *testing.T) {
 		t.Fatalf("Auto fallback failed: %v", err)
 	}
 
-	if result.DownloadMbps <= 0 {
+	if result.DownloadSpeed <= 0 {
 		t.Error("Expected positive download speed")
 	}
 }
@@ -74,7 +74,7 @@ func TestIntegrationRandomServer(t *testing.T) {
 		return
 	}
 
-	if result.DownloadMbps <= 0 {
+	if result.DownloadSpeed <= 0 {
 		t.Error("Expected positive download speed")
 	}
 }
