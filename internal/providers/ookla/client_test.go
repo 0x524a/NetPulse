@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -97,10 +98,13 @@ func TestMeasureDownloadWithMock(t *testing.T) {
 	}
 	speedChan := make(chan float64, 100)
 
-	measurements := 0
+	var measurements int
+	var mu sync.Mutex
 	go func() {
 		for range speedChan {
+			mu.Lock()
 			measurements++
+			mu.Unlock()
 		}
 	}()
 
@@ -108,7 +112,10 @@ func TestMeasureDownloadWithMock(t *testing.T) {
 	if err != nil {
 		t.Logf("MeasureDownload error: %v", err)
 	}
-	t.Logf("Download test made %d speed measurements", measurements)
+	mu.Lock()
+	count := measurements
+	mu.Unlock()
+	t.Logf("Download test made %d speed measurements", count)
 }
 
 func TestMeasureUploadWithMock(t *testing.T) {
@@ -126,10 +133,13 @@ func TestMeasureUploadWithMock(t *testing.T) {
 	}
 	speedChan := make(chan float64, 100)
 
-	measurements := 0
+	var measurements int
+	var mu sync.Mutex
 	go func() {
 		for range speedChan {
+			mu.Lock()
 			measurements++
+			mu.Unlock()
 		}
 	}()
 
@@ -137,5 +147,8 @@ func TestMeasureUploadWithMock(t *testing.T) {
 	if err != nil {
 		t.Logf("MeasureUpload error: %v", err)
 	}
-	t.Logf("Upload test made %d speed measurements", measurements)
+	mu.Lock()
+	count := measurements
+	mu.Unlock()
+	t.Logf("Upload test made %d speed measurements", count)
 }
