@@ -46,11 +46,31 @@ const (
 // spending real wall-clock seconds on every run.
 var downloadTestDuration = 15 * time.Second
 
+// isRetryableStatus reports whether a status reflects a transient server-side
+// condition (rate limiting or a server error) rather than a permanent refusal
+// such as the 403 returned for an oversized request. Transient failures are
+// reported as ErrRateLimited so the caller can tell the user to retry, instead
+// of being folded into a throughput figure.
+func isRetryableStatus(code int) bool {
+	return code == http.StatusTooManyRequests || code >= 500
+}
+
+// maxDownloadBytes is the largest value /__down accepts. Measured against the
+// live endpoint: bytes=99_999_999 returns 200, bytes=100_000_000 returns 403
+// Forbidden with a 1-byte body, as does anything larger. Cloudflare's own
+// client lists 100_000_000 in its schedule but in practice stops escalating
+// once a single request exceeds ~1s, so it rarely asks for the one size the
+// server rejects. We request sizes directly, so we must respect the cap:
+// without it, any link fast enough to reach the last schedule entry fails the
+// whole measurement with a 403.
+const maxDownloadBytes = 99_999_999
+
 // downloadSizes is the payload-size schedule used by Cloudflare's official
-// speed test client for downloads. The leading 0-byte entry is not a
-// throughput sample -- it is used as a latency probe (see probe below); the
-// remaining sizes are used to characterize download throughput.
-var downloadSizes = []int{0, 100_000, 1_000_000, 10_000_000, 25_000_000, 100_000_000}
+// speed test client for downloads, with the final entry lowered to stay under
+// maxDownloadBytes. The leading 0-byte entry is not a throughput sample -- it
+// is used as a latency probe (see probe below); the remaining sizes are used
+// to characterize download throughput.
+var downloadSizes = []int{0, 100_000, 1_000_000, 10_000_000, 25_000_000, 75_000_000}
 
 // uploadSizes is a deliberately smaller schedule than downloadSizes. Upload
 // measurement is bounded by a caller-supplied duration rather than a fixed
@@ -63,6 +83,11 @@ var (
 	// ErrNotAvailable indicates the Cloudflare speed test edge could not be
 	// reached.
 	ErrNotAvailable = errors.New("cloudflare speed test not available")
+
+	// ErrRateLimited indicates the edge rejected a transfer with 429 or a 5xx
+	// mid-measurement. The measurement is abandoned rather than reported,
+	// because a partially rate-limited transfer understates real throughput.
+	ErrRateLimited = errors.New("cloudflare rate-limited the measurement; wait a little and retry")
 )
 
 // reqDurRe matches the request-duration metric Cloudflare's edge reports in
@@ -125,8 +150,13 @@ func (c *Client) Init() error {
 	return nil
 }
 
-// downloadURL builds a GET /__down request URL for n bytes.
+// downloadURL builds a GET /__down request URL for n bytes, clamped to
+// maxDownloadBytes so an oversized request cannot turn into a 403 that fails
+// the entire measurement.
 func (c *Client) downloadURL(n int) string {
+	if n > maxDownloadBytes {
+		n = maxDownloadBytes
+	}
 	return fmt.Sprintf("%s/__down?bytes=%d", c.baseURL, n)
 }
 
@@ -310,7 +340,7 @@ func (c *Client) fetchDownload(ctx context.Context, n int) (bytesRead int64, err
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return 0, fmt.Errorf("cloudflare: download returned unexpected status %s", resp.Status)
+		return 0, &statusError{op: "download", status: resp.Status, code: resp.StatusCode, retryAfter: resp.Header.Get("Retry-After")}
 	}
 
 	read, copyErr := io.Copy(io.Discard, resp.Body)
@@ -318,6 +348,42 @@ func (c *Client) fetchDownload(ctx context.Context, n int) (bytesRead int64, err
 		return read, copyErr
 	}
 	return read, nil
+}
+
+// statusError carries the status code so callers can distinguish a transient
+// rate-limit or server error from a permanent one, and count zero bytes for
+// either. It never reports partial bytes as a successful sample.
+type statusError struct {
+	op         string
+	status     string
+	code       int
+	retryAfter string
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("cloudflare: %s returned unexpected status %s", e.op, e.status)
+}
+
+// classifyTransferError converts a transfer failure into the error the caller
+// should surface.
+//
+// Deliberately NOT a retry helper. Throughput here is bytes accumulated over
+// wall-clock elapsed, so sleeping between attempts inflates the denominator
+// without adding bytes: retrying inside the measurement loop turned a
+// rate-limited run into a plausible-looking but badly understated number
+// (observed: 16.88 Mbps with a single sample on a link that measures ~800
+// Mbps). A number we know to be wrong is worse than an error, so a rate limit
+// aborts the measurement and says so.
+func classifyTransferError(err error) error {
+	var se *statusError
+	if errors.As(err, &se) && isRetryableStatus(se.code) {
+		hint := ""
+		if se.retryAfter != "" {
+			hint = fmt.Sprintf(" (retry after %ss)", strings.TrimSpace(se.retryAfter))
+		}
+		return fmt.Errorf("%w: %s returned %s%s", ErrRateLimited, se.op, se.status, hint)
+	}
+	return err
 }
 
 // fetchUpload issues a single POST /__up?bytes=n request whose body is n
@@ -443,7 +509,7 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 						return
 					}
 					select {
-					case errCh <- err:
+					case errCh <- classifyTransferError(err):
 					default:
 					}
 					return
@@ -529,7 +595,7 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 						return
 					}
 					select {
-					case errCh <- err:
+					case errCh <- classifyTransferError(err):
 					default:
 					}
 					return
