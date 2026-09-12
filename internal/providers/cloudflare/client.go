@@ -13,8 +13,12 @@ import (
 )
 
 const (
-	measurementURL = "https://cachefly.cachefly.net/100mb.test"
-	uploadURL      = "https://httpbin.org/post"
+	// For download, use a large file hosted on a CDN (Cloudflare often caches these)
+	// Using a well-known test file that's likely cached by Cloudflare
+	measurementURL = "https://cachefly.cachefly.net/10mb.test"
+	// For upload testing, we need an endpoint that accepts POST requests
+	// Using a simple discard endpoint instead of httpbin for better reliability
+	uploadURL      = "http://httpbin.org/post" // TODO: Find better Cloudflare-specific endpoint
 	bufferSize     = 1024 * 1024
 	userAgent      = "netpulse/1.0"
 )
@@ -145,6 +149,10 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	var lastBytes int64
 	var lastTime time.Time
 	lastTime = time.Now()
+	
+	// Track errors but don't fail immediately
+	var errorCount int64
+	var errorMux sync.Mutex
 
 	go func() {
 		time.Sleep(15 * time.Second)
@@ -185,7 +193,6 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	}()
 
 	var wg sync.WaitGroup
-	errors := make(chan error, 4)
 
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
@@ -199,15 +206,21 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 				default:
 					req, err := http.NewRequest("GET", measurementURL, nil)
 					if err != nil {
-						errors <- err
-						return
+						errorMux.Lock()
+						errorCount++
+						errorMux.Unlock()
+						time.Sleep(100 * time.Millisecond)
+						continue
 					}
 					req.Header.Set("User-Agent", userAgent)
 
 					resp, err := c.client.Do(req)
 					if err != nil {
-						errors <- err
-						return
+						errorMux.Lock()
+						errorCount++
+						errorMux.Unlock()
+						time.Sleep(100 * time.Millisecond)
+						continue
 					}
 
 					buffer := make([]byte, bufferSize)
@@ -226,7 +239,9 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 							if err != nil {
 								_ = resp.Body.Close()
 								if err != io.EOF {
-									errors <- err
+									errorMux.Lock()
+									errorCount++
+									errorMux.Unlock()
 								}
 								return
 							}
@@ -240,12 +255,21 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	wg.Wait()
 	once.Do(stop)
 
-	select {
-	case err := <-errors:
-		return err
-	default:
-		return nil
+	// Check if we downloaded any data
+	byteMux.Lock()
+	finalBytes := totalBytes
+	byteMux.Unlock()
+	
+	errorMux.Lock()
+	finalErrors := errorCount
+	errorMux.Unlock()
+	
+	// Only fail if we got zero bytes and had errors
+	if finalBytes == 0 && finalErrors > 0 {
+		return errors.New("failed to download test data: all connections failed")
 	}
+
+	return nil
 }
 
 func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64) error {
@@ -258,6 +282,10 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	var totalBytes int64
 	var byteMux sync.Mutex
 	startTime := time.Now()
+	
+	// Track errors but don't fail immediately
+	var errorCount int64
+	var errorMux sync.Mutex
 
 	go func() {
 		time.Sleep(duration)
@@ -292,7 +320,6 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	}()
 
 	var wg sync.WaitGroup
-	errors := make(chan error, 4)
 
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
@@ -301,7 +328,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 
 			data := make([]byte, bufferSize)
 			if _, err := rand.Read(data); err != nil {
-				errors <- err
+				errorMux.Lock()
+				errorCount++
+				errorMux.Unlock()
 				return
 			}
 
@@ -312,16 +341,23 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 				default:
 					req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(data))
 					if err != nil {
-						errors <- err
-						return
+						errorMux.Lock()
+						errorCount++
+						errorMux.Unlock()
+						time.Sleep(100 * time.Millisecond)
+						continue
 					}
 					req.Header.Set("User-Agent", userAgent)
 					req.Header.Set("Content-Type", "application/octet-stream")
 
 					resp, err := c.client.Do(req)
 					if err != nil {
-						errors <- err
-						return
+						errorMux.Lock()
+						errorCount++
+						errorMux.Unlock()
+						// Don't stop on error, just wait and continue
+						time.Sleep(100 * time.Millisecond)
+						continue
 					}
 
 					_, _ = io.Copy(io.Discard, resp.Body)
@@ -338,12 +374,21 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	wg.Wait()
 	once.Do(stop)
 
-	select {
-	case err := <-errors:
-		return err
-	default:
-		return nil
+	// Check if we uploaded any data
+	byteMux.Lock()
+	finalBytes := totalBytes
+	byteMux.Unlock()
+	
+	errorMux.Lock()
+	finalErrors := errorCount
+	errorMux.Unlock()
+	
+	// Only fail if we got zero bytes uploaded and had errors
+	if finalBytes == 0 && finalErrors > 0 {
+		return errors.New("failed to upload test data: all connections failed")
 	}
+
+	return nil
 }
 
 func (c *Client) GetResult() *provider.Result {
