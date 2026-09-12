@@ -1,10 +1,10 @@
 module github.com/0x524a/netpulse
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/urfave/cli/v2 v2.27.7
-	golang.org/x/net v0.47.0
+	golang.org/x/net v0.55.0
 )
 
 require (
