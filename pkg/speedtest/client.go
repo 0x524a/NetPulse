@@ -33,9 +33,10 @@ type Result struct {
 
 // Client is the public interface for the speed test client
 type Client struct {
-	config  *config.Config
-	tester  *speedtest.SpeedTest
-	results []*Result // Store results when running multiple providers
+	config    *config.Config
+	tester    *speedtest.SpeedTest
+	results   []*Result // Store results when running multiple providers
+	configErr error     // set by New if the applied options produced an invalid config
 }
 
 // Option is a functional option for configuring the Client
@@ -97,6 +98,11 @@ func New(opts ...Option) *Client {
 		opt(client)
 	}
 
+	if err := cfg.Validate(); err != nil {
+		client.configErr = err
+		return client
+	}
+
 	client.tester = speedtest.New(cfg)
 
 	return client
@@ -104,6 +110,10 @@ func New(opts ...Option) *Client {
 
 // Run executes the speed test and returns the results
 func (c *Client) Run() (*Result, error) {
+	if c.configErr != nil {
+		return nil, fmt.Errorf("invalid speed test configuration: %w", c.configErr)
+	}
+
 	// Handle "all" provider option to test with all providers
 	if c.config.Provider == "all" {
 		return c.runAllProviders()

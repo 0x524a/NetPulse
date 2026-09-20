@@ -2,9 +2,27 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"strings"
 	"time"
 )
+
+// knownProviders lists the individual (non-aggregate) provider names accepted
+// in Provider/Providers.
+var knownProviders = map[string]bool{
+	"fastcom":    true,
+	"cloudflare": true,
+	"mlab":       true,
+	"librespeed": true,
+	"ookla":      true,
+}
+
+// knownServerModes lists the accepted values for ServerMode.
+var knownServerModes = map[string]bool{
+	"auto":     true,
+	"random":   true,
+	"specific": true,
+}
 
 // Config holds the configuration for the speed test
 type Config struct {
@@ -52,4 +70,38 @@ func (c *Config) LoadFromFlags() {
 		// Set Provider to a special value to indicate multiple providers
 		c.Provider = "multiple"
 	}
+}
+
+// Validate checks that the configuration holds sane, executable values.
+func (c *Config) Validate() error {
+	if c.URLCount <= 0 {
+		return fmt.Errorf("urlCount must be positive, got %d", c.URLCount)
+	}
+
+	if c.Duration <= 0 {
+		return fmt.Errorf("duration must be positive, got %s", c.Duration)
+	}
+
+	if !knownServerModes[c.ServerMode] {
+		return fmt.Errorf("unknown server mode %q, expected one of auto, random, specific", c.ServerMode)
+	}
+
+	switch c.Provider {
+	case "auto", "all":
+	case "multiple":
+		if len(c.Providers) == 0 {
+			return fmt.Errorf("provider mode is 'multiple' but no providers were given")
+		}
+		for _, p := range c.Providers {
+			if !knownProviders[p] {
+				return fmt.Errorf("unknown provider %q", p)
+			}
+		}
+	default:
+		if !knownProviders[c.Provider] {
+			return fmt.Errorf("unknown provider %q", c.Provider)
+		}
+	}
+
+	return nil
 }
