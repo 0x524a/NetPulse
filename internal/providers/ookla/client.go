@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/0x524a/netpulse/internal/providers/provider"
 )
 
 const (
@@ -48,7 +50,7 @@ func (c *Client) IsAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer provider.DrainAndClose(resp)
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -271,9 +273,7 @@ func (c *Client) uploadChunk(data []byte) int64 {
 	if err != nil {
 		return 0
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	_, _ = io.Copy(io.Discard, resp.Body)
+	defer provider.DrainAndClose(resp)
 
 	return int64(len(data))
 }
@@ -285,8 +285,7 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	defer provider.DrainAndClose(resp)
 
 	return time.Since(start), nil
 }
@@ -304,8 +303,7 @@ func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 		if err != nil {
 			continue
 		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
+		provider.DrainAndClose(resp)
 		measurements = append(measurements, time.Since(start))
 	}
 
