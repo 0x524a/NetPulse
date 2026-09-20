@@ -84,11 +84,11 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
-		defer func() {
-			// Ensure we don't panic if channel is closed
-			_ = recover()
-		}()
+		defer wg.Done()
 		for {
 			select {
 			case <-done:
@@ -118,7 +118,6 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	}()
 
 	// Download from multiple connections
-	var wg sync.WaitGroup
 	numConnections := 4
 
 	for i := 0; i < numConnections; i++ {
@@ -196,11 +195,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	wg.Add(1)
 	go func() {
-		defer func() {
-			// Ensure we don't panic if channel is closed
-			_ = recover()
-		}()
+		defer wg.Done()
 		for {
 			select {
 			case <-done:
