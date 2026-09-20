@@ -12,8 +12,8 @@ import (
 	"github.com/0x524a/netpulse/pkg/speedtest"
 )
 
-func main() {
-	app := &cli.App{
+func newApp() *cli.App {
+	return &cli.App{
 		Name:    "speedtest",
 		Usage:   "Internet Speed Test Client",
 		Version: "1.0.0",
@@ -113,7 +113,10 @@ func main() {
 			return nil
 		},
 	}
+}
 
+func main() {
+	app := newApp()
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
