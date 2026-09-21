@@ -83,11 +83,12 @@ func (bs *BenchmarkSuite) Finalize() error {
 				if result.UploadMbps > benchmark.MaxUploadMbps {
 					benchmark.MaxUploadMbps = result.UploadMbps
 				}
-				if result.Latency.Milliseconds() < int64(benchmark.MinLatencyMs) {
-					benchmark.MinLatencyMs = float64(result.Latency.Milliseconds())
+				latencyMs := float64(result.Latency.Milliseconds())
+				if latencyMs < benchmark.MinLatencyMs {
+					benchmark.MinLatencyMs = latencyMs
 				}
-				if result.Latency.Milliseconds() > int64(benchmark.MaxLatencyMs) {
-					benchmark.MaxLatencyMs = float64(result.Latency.Milliseconds())
+				if latencyMs > benchmark.MaxLatencyMs {
+					benchmark.MaxLatencyMs = latencyMs
 				}
 			}
 		}

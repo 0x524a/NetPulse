@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0x524a/netpulse/internal/providers/provider"
 	"golang.org/x/net/html"
 )
 
@@ -61,7 +62,7 @@ func (c *Client) IsAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer provider.DrainAndClose(resp)
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -266,7 +267,11 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	var byteLen int64
 	var byteMux sync.Mutex
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for length := range byteLenChan {
 			byteMux.Lock()
 			byteLen += length
@@ -279,8 +284,9 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	defer ticker.Stop()
 
 	var secondPass float64
+	wg.Add(1)
 	go func() {
-		defer func() { _ = recover() }()
+		defer wg.Done()
 		for {
 			select {
 			case <-done:
@@ -301,11 +307,11 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	}()
 
 	// Start downloading from URLs
-	var wg sync.WaitGroup
+	var downloadWG sync.WaitGroup
 	for i, url := range urls {
-		wg.Add(1)
+		downloadWG.Add(1)
 		go func(index int, downloadURL string) {
-			defer wg.Done()
+			defer downloadWG.Done()
 
 			for {
 				timeoutMux.Lock()
@@ -324,8 +330,10 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 		}(i, url)
 	}
 
-	wg.Wait()
+	downloadWG.Wait()
+	close(byteLenChan)
 	once.Do(stop)
+	wg.Wait()
 
 	return nil
 }
@@ -399,7 +407,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-done:
@@ -470,10 +480,7 @@ func (c *Client) uploadChunk(url string, data []byte) int64 {
 	if err != nil {
 		return 0
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Discard response body
-	_, _ = io.Copy(io.Discard, resp.Body)
+	defer provider.DrainAndClose(resp)
 
 	return int64(len(data))
 }
@@ -485,8 +492,7 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	defer provider.DrainAndClose(resp)
 	return time.Since(start), nil
 }
 
@@ -503,8 +509,7 @@ func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 		if err != nil {
 			continue
 		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
+		provider.DrainAndClose(resp)
 		measurements = append(measurements, time.Since(start))
 	}
 

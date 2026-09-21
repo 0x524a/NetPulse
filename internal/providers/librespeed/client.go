@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/0x524a/netpulse/internal/providers/provider"
 )
 
 const (
@@ -55,7 +57,7 @@ func (c *Client) IsAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer provider.DrainAndClose(resp)
 	return resp.StatusCode == http.StatusOK
 }
 
@@ -99,7 +101,13 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	// Start download test
+	var wg sync.WaitGroup
+	numConnections := 4
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-done:
@@ -127,10 +135,6 @@ func (c *Client) MeasureDownload(speedChan chan<- float64) error {
 			}
 		}
 	}()
-
-	// Start download test
-	var wg sync.WaitGroup
-	numConnections := 4
 
 	for i := 0; i < numConnections; i++ {
 		wg.Add(1)
@@ -168,7 +172,7 @@ func (c *Client) downloadChunk() int64 {
 	if err != nil {
 		return 0
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() // body is drained by the read loop below
 
 	buf := make([]byte, bufferSize)
 	var total int64
@@ -211,7 +215,9 @@ func (c *Client) MeasureUpload(duration time.Duration, speedChan chan<- float64)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-done:
@@ -286,9 +292,7 @@ func (c *Client) uploadChunk(data []byte) int64 {
 	if err != nil {
 		return 0
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	_, _ = io.Copy(io.Discard, resp.Body)
+	defer provider.DrainAndClose(resp)
 
 	return int64(len(data))
 }
@@ -307,8 +311,7 @@ func (c *Client) MeasureLatency() (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	defer provider.DrainAndClose(resp)
 
 	return time.Since(start), nil
 }
@@ -331,8 +334,7 @@ func (c *Client) MeasureJitter(samples int) (time.Duration, error) {
 		if err != nil {
 			continue
 		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
+		provider.DrainAndClose(resp)
 		measurements = append(measurements, time.Since(start))
 	}
 

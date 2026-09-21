@@ -21,7 +21,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	for i, provider := range suite.OrderedProviders {
 		score := suite.ProviderScores[provider]
 		grade := getScoreGrade(score)
-		report.WriteString(fmt.Sprintf("%d. %-20s Score: %6.2f/100  Grade: %s\n", i+1, provider, score, grade))
+		fmt.Fprintf(&report, "%d. %-20s Score: %6.2f/100  Grade: %s\n", i+1, provider, score, grade)
 	}
 	report.WriteString("\n")
 
@@ -30,7 +30,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("────────────────────────────────────────────────────────────────\n")
 	downloadComp := suite.GetComparison("download")
 	for i, point := range downloadComp.Providers {
-		report.WriteString(fmt.Sprintf("%d. %-20s %8.2f Mbps  [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage))
+		fmt.Fprintf(&report, "%d. %-20s %8.2f Mbps  [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage)
 	}
 	report.WriteString("\n")
 
@@ -39,7 +39,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("────────────────────────────────────────────────────────────────\n")
 	uploadComp := suite.GetComparison("upload")
 	for i, point := range uploadComp.Providers {
-		report.WriteString(fmt.Sprintf("%d. %-20s %8.2f Mbps  [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage))
+		fmt.Fprintf(&report, "%d. %-20s %8.2f Mbps  [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage)
 	}
 	report.WriteString("\n")
 
@@ -48,7 +48,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("────────────────────────────────────────────────────────────────\n")
 	latencyComp := suite.GetComparison("latency")
 	for i, point := range latencyComp.Providers {
-		report.WriteString(fmt.Sprintf("%d. %-20s %8.2f ms   [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage))
+		fmt.Fprintf(&report, "%d. %-20s %8.2f ms   [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage)
 	}
 	report.WriteString("\n")
 
@@ -57,7 +57,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("────────────────────────────────────────────────────────────────\n")
 	jitterComp := suite.GetComparison("jitter")
 	for i, point := range jitterComp.Providers {
-		report.WriteString(fmt.Sprintf("%d. %-20s %8.2f ms   [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage))
+		fmt.Fprintf(&report, "%d. %-20s %8.2f ms   [%5.1f%%]\n", i+1, point.ProviderName, point.Value, point.Percentage)
 	}
 	report.WriteString("\n")
 
@@ -66,7 +66,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("────────────────────────────────────────────────────────────────\n")
 	reliabilityComp := suite.GetComparison("reliability")
 	for i, point := range reliabilityComp.Providers {
-		report.WriteString(fmt.Sprintf("%d. %-20s %6.2f%%\n", i+1, point.ProviderName, point.Value))
+		fmt.Fprintf(&report, "%d. %-20s %6.2f%%\n", i+1, point.ProviderName, point.Value)
 	}
 	report.WriteString("\n")
 
@@ -75,7 +75,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("────────────────────────────────────────────────────────────────\n")
 	consistencyComp := suite.GetComparison("consistency")
 	for i, point := range consistencyComp.Providers {
-		report.WriteString(fmt.Sprintf("%d. %-20s %6.2f/100\n", i+1, point.ProviderName, point.Value))
+		fmt.Fprintf(&report, "%d. %-20s %6.2f/100\n", i+1, point.ProviderName, point.Value)
 	}
 	report.WriteString("\n")
 
@@ -84,33 +84,33 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("════════════════════════════════════════════════════════════════\n\n")
 	for _, provider := range suite.OrderedProviders {
 		benchmark := suite.Benchmarks[provider]
-		report.WriteString(fmt.Sprintf("Provider: %s\n", provider))
+		fmt.Fprintf(&report, "Provider: %s\n", provider)
 		report.WriteString("────────────────────────────────────────────────────────────────\n")
-		report.WriteString(fmt.Sprintf("  Tests Run:            %d\n", benchmark.NumTests))
-		report.WriteString(fmt.Sprintf("  Successful:           %d\n", benchmark.SuccessfulTests))
-		report.WriteString(fmt.Sprintf("  Failed:               %d\n", benchmark.FailedTests))
-		report.WriteString(fmt.Sprintf("  Reliability:          %.2f%%\n", benchmark.Reliability))
-		report.WriteString(fmt.Sprintf("  Consistency Score:    %.2f/100\n", benchmark.Consistency))
+		fmt.Fprintf(&report, "  Tests Run:            %d\n", benchmark.NumTests)
+		fmt.Fprintf(&report, "  Successful:           %d\n", benchmark.SuccessfulTests)
+		fmt.Fprintf(&report, "  Failed:               %d\n", benchmark.FailedTests)
+		fmt.Fprintf(&report, "  Reliability:          %.2f%%\n", benchmark.Reliability)
+		fmt.Fprintf(&report, "  Consistency Score:    %.2f/100\n", benchmark.Consistency)
 		report.WriteString("\n")
 		report.WriteString("  Download Speed:\n")
-		report.WriteString(fmt.Sprintf("    Average:            %.2f Mbps\n", benchmark.AvgDownloadMbps))
-		report.WriteString(fmt.Sprintf("    Min:                %.2f Mbps\n", benchmark.MinDownloadMbps))
-		report.WriteString(fmt.Sprintf("    Max:                %.2f Mbps\n", benchmark.MaxDownloadMbps))
+		fmt.Fprintf(&report, "    Average:            %.2f Mbps\n", benchmark.AvgDownloadMbps)
+		fmt.Fprintf(&report, "    Min:                %.2f Mbps\n", benchmark.MinDownloadMbps)
+		fmt.Fprintf(&report, "    Max:                %.2f Mbps\n", benchmark.MaxDownloadMbps)
 		report.WriteString("\n")
 		report.WriteString("  Upload Speed:\n")
-		report.WriteString(fmt.Sprintf("    Average:            %.2f Mbps\n", benchmark.AvgUploadMbps))
-		report.WriteString(fmt.Sprintf("    Min:                %.2f Mbps\n", benchmark.MinUploadMbps))
-		report.WriteString(fmt.Sprintf("    Max:                %.2f Mbps\n", benchmark.MaxUploadMbps))
+		fmt.Fprintf(&report, "    Average:            %.2f Mbps\n", benchmark.AvgUploadMbps)
+		fmt.Fprintf(&report, "    Min:                %.2f Mbps\n", benchmark.MinUploadMbps)
+		fmt.Fprintf(&report, "    Max:                %.2f Mbps\n", benchmark.MaxUploadMbps)
 		report.WriteString("\n")
 		report.WriteString("  Latency:\n")
-		report.WriteString(fmt.Sprintf("    Average:            %.2f ms\n", benchmark.AvgLatencyMs))
-		report.WriteString(fmt.Sprintf("    Min:                %.2f ms\n", benchmark.MinLatencyMs))
-		report.WriteString(fmt.Sprintf("    Max:                %.2f ms\n", benchmark.MaxLatencyMs))
+		fmt.Fprintf(&report, "    Average:            %.2f ms\n", benchmark.AvgLatencyMs)
+		fmt.Fprintf(&report, "    Min:                %.2f ms\n", benchmark.MinLatencyMs)
+		fmt.Fprintf(&report, "    Max:                %.2f ms\n", benchmark.MaxLatencyMs)
 		report.WriteString("\n")
 		report.WriteString("  Jitter:\n")
-		report.WriteString(fmt.Sprintf("    Average:            %.2f ms\n", benchmark.AvgJitterMs))
+		fmt.Fprintf(&report, "    Average:            %.2f ms\n", benchmark.AvgJitterMs)
 		report.WriteString("\n")
-		report.WriteString(fmt.Sprintf("  Overall Score:       %.2f/100\n", suite.ProviderScores[provider]))
+		fmt.Fprintf(&report, "  Overall Score:       %.2f/100\n", suite.ProviderScores[provider])
 		report.WriteString("\n\n")
 	}
 
@@ -128,7 +128,7 @@ func FormatBenchmarkReport(suite *BenchmarkSuite) string {
 	report.WriteString("  - Consistency: Based on result variance (lower stddev = higher score)\n")
 	report.WriteString("\n")
 
-	report.WriteString("Benchmark Duration: " + suite.TotalDuration.String() + "\n")
+	fmt.Fprintf(&report, "Benchmark Duration: %s\n", suite.TotalDuration)
 
 	return report.String()
 }
@@ -157,8 +157,8 @@ func FormatComparisonTable(suite *BenchmarkSuite) string {
 
 	table.WriteString("\nQUICK COMPARISON TABLE\n")
 	table.WriteString("════════════════════════════════════════════════════════════════\n")
-	table.WriteString(fmt.Sprintf("%-20s | %10s | %8s | %8s | %8s | %8s\n",
-		"Provider", "Download", "Upload", "Latency", "Score", "Grade"))
+	fmt.Fprintf(&table, "%-20s | %10s | %8s | %8s | %8s | %8s\n",
+		"Provider", "Download", "Upload", "Latency", "Score", "Grade")
 	table.WriteString("────────────────────────────────────────────────────────────────\n")
 
 	for _, provider := range suite.OrderedProviders {
@@ -166,13 +166,13 @@ func FormatComparisonTable(suite *BenchmarkSuite) string {
 		score := suite.ProviderScores[provider]
 		grade := getScoreGrade(score)
 
-		table.WriteString(fmt.Sprintf("%-20s | %8.2f M | %6.2f M | %6.2f ms | %6.2f | %s\n",
+		fmt.Fprintf(&table, "%-20s | %8.2f M | %6.2f M | %6.2f ms | %6.2f | %s\n",
 			provider,
 			benchmark.AvgDownloadMbps,
 			benchmark.AvgUploadMbps,
 			benchmark.AvgLatencyMs,
 			score,
-			grade))
+			grade)
 	}
 	table.WriteString("════════════════════════════════════════════════════════════════\n\n")
 

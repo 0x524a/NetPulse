@@ -1,6 +1,10 @@
 package provider
 
-import "time"
+import (
+	"io"
+	"net/http"
+	"time"
+)
 
 // Provider defines the interface that all speed test providers must implement
 type Provider interface {
@@ -27,6 +31,17 @@ type Provider interface {
 
 	// IsAvailable checks if the provider is currently accessible
 	IsAvailable() bool
+}
+
+// DrainAndClose discards any remaining response body and closes it so the
+// underlying connection can be reused by the HTTP transport. It is a no-op
+// if resp is nil.
+func DrainAndClose(resp *http.Response) {
+	if resp == nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
 }
 
 // Result holds comprehensive speed test results
